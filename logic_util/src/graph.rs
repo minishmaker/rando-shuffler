@@ -32,7 +32,7 @@ pub fn make_graph(room: Vec<RoomItem<'_>>) -> DiGraph<Node<'_>, Edge<'_>> {
                     let graph_node = &mut graph[graph_node];
 
                     match graph_node {
-                        Some(_) => panic!("Duplicate nodes {}", node.name),
+                        Some(_) => if !node.modify { panic!("Duplicate nodes: {}", node.name) },
                         None => *graph_node = Some(Node(node.name, node.children))
                     }
                 }

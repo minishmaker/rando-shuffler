@@ -25,7 +25,8 @@ pub enum RoomItem<'a> {
 #[derive(Clone, Debug)]
 pub struct Node<'a> {
     pub name: Ident<'a>,
-    pub children: Vec<Descriptor<'a>>
+    pub children: Vec<Descriptor<'a>>,
+    pub modify: bool
 }
 
 #[derive(Clone, Debug)]

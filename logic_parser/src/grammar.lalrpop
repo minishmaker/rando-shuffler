@@ -16,8 +16,8 @@ Scope: Scope<'input> = {
 };
 
 RoomItem: RoomItem<'input> = {
-    "node" <name:"ident"> "\n" => RoomItem::Node(Node { <>, children: Vec::new() }),
-    "node" <name:"ident"> ":" <children:Descriptors> => RoomItem::Node(Node { <> }),
+    "node" <name:"ident"> "\n" => RoomItem::Node(Node { <>, children: Vec::new(), modify: false }),
+    "node" <name:"ident"> <m:"+"?> ":" <children:Descriptors> => RoomItem::Node(Node { name, children, modify: m.is_some() }),
     <left:"ident"> <arrow:"arrow"> <right:"ident"> "\n" => RoomItem::Connection(Connection { children: Vec::new(), <>}),
     <left:"ident"> <arrow:"arrow"> <right:"ident"> ":" <children:Descriptors> => RoomItem::Connection(Connection { <> })
 };
