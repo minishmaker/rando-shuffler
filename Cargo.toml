@@ -1,0 +1,13 @@
+[workspace]
+
+
+[package]
+name = "rando_shuffler"
+version = "0.1.0"
+authors = ["berylliosis <berylliumninja@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+petgraph = "0.5.1"
+logic_parser = { path = "logic_parser" }
+logic_util = { path = "logic_util" }

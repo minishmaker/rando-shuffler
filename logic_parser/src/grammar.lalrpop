@@ -1,0 +1,106 @@
+use std::iter;
+use std::convert::Infallible;
+
+use super::lexer::{Tok, Ident, Arrow};
+use super::ast::{Scope, RoomItem, Descriptor, DescriptorData, ScopeChild, NamespacedIdent, Node, Connection};
+
+#[LALR]
+grammar<'input>(input: &'input str);
+
+pub Tree = Scope*;
+
+Scope: Scope<'input> = {
+    <keyword:"keyword"> <name:"ident"> => Scope { children: ScopeChild::None, <> },
+    <keyword:"keyword"> <name:"ident"> ":" "\n" "indent" <c:Scope+> "dedent" => Scope { keyword, name, children: ScopeChild::Scope(c) },
+    <keyword:"keyword"> <name:"ident"> ":" "\n" "indent" <c:RoomItem+> "dedent" => Scope { keyword, name, children: ScopeChild::Room(c) },
+};
+
+RoomItem: RoomItem<'input> = {
+    "node" <name:"ident"> "\n" => RoomItem::Node(Node { <>, children: Vec::new() }),
+    "node" <name:"ident"> ":" <children:Descriptors> => RoomItem::Node(Node { <> }),
+    <left:"ident"> <arrow:"arrow"> <right:"ident"> "\n" => RoomItem::Connection(Connection { children: Vec::new(), <>}),
+    <left:"ident"> <arrow:"arrow"> <right:"ident"> ":" <children:Descriptors> => RoomItem::Connection(Connection { <> })
+};
+
+Descriptors: Vec<Descriptor<'input>> = {
+    "\n" "indent" <BlockDescriptor+> "dedent",
+    <d:DescriptorData> <v:("," <DescriptorData>)*> ","? "\n" => {
+        v.into_iter()
+            .chain(iter::once(d))
+            .map(|d| Descriptor { data: d, children: Vec::new() })
+            .collect()
+    },
+    <LogicSugar> "\n" => vec![<>]
+};
+
+DescriptorData: DescriptorData<'input> = {
+    <NamedDescriptor>,
+    <keyword:"keyword"> => DescriptorData::Keyword { <> }
+};
+
+BlockDescriptor: Descriptor<'input> = {
+    <DescriptorData> "\n" => Descriptor { data: <>, children: Vec::new() },
+    <d:DescriptorData> ":" <c:Descriptors> => Descriptor { data: d, children: c }
+};
+
+NamedDescriptor: DescriptorData<'input> = <keyword:"keyword"> <name:NamespacedIdent> => DescriptorData::Named { <> };
+
+NamespacedIdent: NamespacedIdent<'input> = <i:"ident"> <v:("." <"ident">)*> => {
+    let mut v = v;
+    v.insert(0, i);
+    NamespacedIdent { idents: v }
+};
+
+LogicSugar: Descriptor<'input> = "(" <LogicSugarBody> ")";
+
+LogicSugarBody: Descriptor<'input> = {
+    And,
+    Or
+};
+
+And: Descriptor<'input> = <k: ConditionItem> <v:("&" <ConditionItem>)*> => Descriptor {
+    data: DescriptorData::Keyword { keyword: "and" },
+    children: {
+        let mut v = v;
+        v.push(k);
+        v
+    }
+};
+
+Or: Descriptor<'input> = <k: ConditionItem> <v:("|" <ConditionItem>)+> => Descriptor {
+    data: DescriptorData::Keyword { keyword: "or" },
+    children: {
+        let mut v = v;
+        v.push(k);
+        v
+    }
+};
+
+ConditionItem: Descriptor<'input> = {
+    <data:NamedDescriptor> => Descriptor { children: Vec::new(), <> },
+    LogicSugar
+};
+
+extern {
+    type Location = usize;
+    type Error = Infallible;
+
+    enum Tok<'input> {
+        "\n" => Tok::Newline,
+        "indent" => Tok::Indent,
+        "dedent" => Tok::Dedent,
+        "node" => Tok::Node,
+        "keyword" => Tok::Keyword(<&'input str>),
+        "ident" => Tok::Ident(<Ident<'input>>),
+        "arrow" => Tok::Arrow(<Arrow>),
+        ":" => Tok::Colon,
+        "." => Tok::Period,
+        "," => Tok::Comma,
+        "+" => Tok::Plus,
+        "*" => Tok::Star,
+        "&" => Tok::And,
+        "|" => Tok::Or,
+        "(" => Tok::OpenParen,
+        ")" => Tok::CloseParen
+    }
+}
