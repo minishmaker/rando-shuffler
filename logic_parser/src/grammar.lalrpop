@@ -35,7 +35,7 @@ Descriptors: Vec<Descriptor<'input>> = {
 
 DescriptorData: DescriptorData<'input> = {
     <NamedDescriptor>,
-    <keyword:"keyword"> => DescriptorData::Keyword { <> }
+    <keyword:"keyword"> => DescriptorData { <>, name: None }
 };
 
 BlockDescriptor: Descriptor<'input> = {
@@ -43,7 +43,7 @@ BlockDescriptor: Descriptor<'input> = {
     <d:DescriptorData> ":" <c:Descriptors> => Descriptor { data: d, children: c }
 };
 
-NamedDescriptor: DescriptorData<'input> = <keyword:"keyword"> <name:NamespacedIdent> => DescriptorData::Named { <> };
+NamedDescriptor: DescriptorData<'input> = <keyword:"keyword"> <name:NamespacedIdent> => DescriptorData { keyword, name: Some(name) };
 
 NamespacedIdent: NamespacedIdent<'input> = <i:"ident"> <v:("." <"ident">)*> => {
     let mut v = v;
@@ -59,7 +59,7 @@ LogicSugarBody: Descriptor<'input> = {
 };
 
 And: Descriptor<'input> = <k: ConditionItem> <v:("&" <ConditionItem>)*> => Descriptor {
-    data: DescriptorData::Keyword { keyword: "and" },
+    data: DescriptorData { keyword: "and", name: None },
     children: {
         let mut v = v;
         v.push(k);
@@ -68,7 +68,7 @@ And: Descriptor<'input> = <k: ConditionItem> <v:("&" <ConditionItem>)*> => Descr
 };
 
 Or: Descriptor<'input> = <k: ConditionItem> <v:("|" <ConditionItem>)+> => Descriptor {
-    data: DescriptorData::Keyword { keyword: "or" },
+    data: DescriptorData { keyword: "or", name: None },
     children: {
         let mut v = v;
         v.push(k);

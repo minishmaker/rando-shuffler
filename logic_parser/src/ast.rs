@@ -44,9 +44,9 @@ pub struct Descriptor<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub enum DescriptorData<'a> {
-    Named { keyword: &'a str, name: NamespacedIdent<'a> },
-    Keyword { keyword: &'a str }
+pub struct DescriptorData<'a> {
+    pub keyword: &'a str,
+    pub name: Option<NamespacedIdent<'a>>
 }
 
 #[derive(Clone, Debug)]
@@ -86,10 +86,12 @@ fn print_descriptor(descriptor: &Descriptor<'_>, indent: usize, f: &mut Formatte
 
 impl Display for DescriptorData<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            DescriptorData::Keyword { keyword } => write!(f, "{}", keyword),
-            DescriptorData::Named { keyword, name } => write!(f, "{} {}", keyword, name)
+        write!(f, "{}", self.keyword)?;
+        if let Some(name) = &self.name {
+            write!(f, " {}", name)?;
         }
+
+        Ok(())
     }
 }
 
