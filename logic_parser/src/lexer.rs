@@ -222,7 +222,7 @@ impl<'a> Lex<'a> {
 
     fn line_empty(&mut self) -> bool {
         // Get first line
-        let mut line = self.text.lines().next().unwrap();
+        let mut line = self.text.lines().next().unwrap_or("");
         
         // Tokenize
         while let Some(tok) = next_token(&mut line) {
