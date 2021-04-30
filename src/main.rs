@@ -16,8 +16,13 @@ fn main() -> io::Result<()> {
             for room in rooms {
                 if let ScopeChild::Room(room) = room.children {
                     let graph = graph::make_graph(room);
-                    let dot = Dot::new(&graph);
-                    println!("{}", dot);
+                    if let Ok(graph) = graph {
+                        let dot = Dot::new(&graph);
+                        println!("{}", dot);
+                    }
+                    else {
+                        println!("{}", graph.unwrap_err());
+                    }
                 }
             }
         }

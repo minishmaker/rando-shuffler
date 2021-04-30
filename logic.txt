@@ -1,0 +1,9 @@
+area Test:
+  room Test:
+    node Test
+    node Other
+    Other -> Test
+    Test <-> Other
+  room Test2
+  room Test3:
+    node Task

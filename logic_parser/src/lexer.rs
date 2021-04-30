@@ -46,6 +46,17 @@ pub enum Arrow {
     Both,
 }
 
+impl Arrow {
+    pub fn new(left: bool, right: bool) -> Option<Arrow> {
+        match (left, right) {
+            (true, true) => Some(Arrow::Both),
+            (true, false) => Some(Arrow::Left),
+            (false, true) => Some(Arrow::Right),
+            (false, false) => None
+        }
+    }
+}
+
 impl Display for Arrow {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -245,7 +256,7 @@ impl<'a> Lex<'a> {
             tok 
         }
     }
-    
+
     fn line_empty(&mut self) -> bool {
         // Get first line
         let mut line = self.text.lines().next().unwrap_or("");
