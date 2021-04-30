@@ -44,14 +44,8 @@ fn add_connection<'a>(
     nodes: &mut HashMap<Ident<'a>, NodeIndex>,
     graph: &mut DiGraph<Node<'a>, Edge<'a>>
 ) -> Result<(), GraphError<'a>> {
-    let &mut left = match nodes.get_mut(&connection.left) {
-        Some(node) => node,
-        None => return Err(GraphError::MissingNode(connection.left))
-    };
-    let &mut right = match nodes.get_mut(&connection.right) {
-        Some(node) => node,
-        None => return Err(GraphError::MissingNode(connection.right))
-    };
+    let &mut left = nodes.get_mut(&connection.left).ok_or(GraphError::MissingNode(connection.left))?;
+    let &mut right = nodes.get_mut(&connection.right).ok_or(GraphError::MissingNode(connection.right))?;
 
     match connection.arrow {
         Arrow::Right => {
