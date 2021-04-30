@@ -137,6 +137,7 @@ struct Lex<'a> {
 }
 
 impl<'a> Lex<'a> {
+    /// Get the next token, of any type, and its length
     fn next_token(&mut self) -> Option<(Tok<'a>, usize)> {
         match self.state {
             LexState::Normal => self.next_normal(),
@@ -154,6 +155,7 @@ impl<'a> Lex<'a> {
         }
     }
 
+    /// Get the next token under normal circumstances, filtering out whitespace/comments and checking for newlines
     fn next_normal(&mut self) -> Option<(Tok<'a>, usize)> {
         match next_token(&mut self.text) {
             Some((Tok::Newline, _)) => { // Comment includes newline
@@ -171,11 +173,16 @@ impl<'a> Lex<'a> {
                     self.index += len;
                     self.next_normal()
             }, 
-            None if self.indent_stack.len() > 0 => { self.text = "\n"; self.next_normal() }, // Trailing newline for dedents
+            None if self.indent_stack.len() > 0 => {
+                // Add trailing newline
+                self.text = "\n";
+                self.next_normal()
+            },
             t => t
         }
     }
 
+    /// Get the next token after a newline and set up for dedents
     fn next_newline(&mut self) -> Option<(Tok<'a>, usize)> {
         // Match initial indent
         let mut indents = 0;
@@ -207,6 +214,7 @@ impl<'a> Lex<'a> {
         }
     }
 
+    /// Called if not all of the dedents are matched
     fn handle_dedent(&mut self, count: usize) -> Option<(Tok<'a>, usize)> {
         let mut lookahead = self.text;
         if let Some((Tok::Whitespace(space), len)) = next_token(&mut lookahead) {
@@ -222,18 +230,22 @@ impl<'a> Lex<'a> {
         }
     }
 
+    /// Called if all of the dedents are matched
     fn handle_indent(&mut self) -> Option<(Tok<'a>, usize)> {
         self.state = LexState::Normal;
         let tok = next_token(&mut self.text);
+
         if let Some((Tok::Whitespace(space), len)) = tok {
+            // Next token is whitespace, so it's another indent
             self.indent_stack.push(space);
             Some((Tok::Indent, len))
         }
         else {
-            tok // Cannot be a comment, as line is not empty
+            // Next token is not whitespace
+            tok 
         }
     }
-
+    
     fn line_empty(&mut self) -> bool {
         // Get first line
         let mut line = self.text.lines().next().unwrap_or("");
