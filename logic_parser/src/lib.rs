@@ -13,10 +13,6 @@ use grammar::TreeParser;
 use ast::Scope;
 
 pub fn parse(input: &str) -> Result<Vec<Scope>, lalrpop_util::ParseError<usize, Tok<'_>, Infallible>> {
-    for t in lexer::lex(input) {
-        println!("{:?}", t);
-    }
-
     let lexer = lexer::lex(input);
     TreeParser::new().parse(input, lexer)
 }

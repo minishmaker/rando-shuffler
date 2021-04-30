@@ -158,7 +158,7 @@ impl<'a> Lex<'a> {
         match next_token(&mut self.text) {
             Some((Tok::Newline, _)) => { // Comment includes newline
                 // Ignore newline if next line is empty
-                if self.line_empty() {
+                if self.line_empty() && self.text.len() > 0 {
                     self.next_normal()
                 }
                 else {
@@ -171,10 +171,7 @@ impl<'a> Lex<'a> {
                     self.index += len;
                     self.next_normal()
             }, 
-            None if self.indent_stack.len() > 0 => { // Add closing newline and dedents
-                self.state = LexState::Newline;
-                Some((Tok::Newline, 0))
-            },
+            None if self.indent_stack.len() > 0 => { self.text = "\n"; self.next_normal() }, // Trailing newline for dedents
             t => t
         }
     }
@@ -203,20 +200,37 @@ impl<'a> Lex<'a> {
 
         let len = self.indent_stack.len();
         if indents < len {
-            self.state = LexState::Dedent(len - indents);
-            self.indent_stack.truncate(indents);
-            self.next_token()
+            self.handle_dedent(len - indents)
         }
         else {
-            self.state = LexState::Normal;
-            let tok = next_token(&mut self.text);
-            if let Some((Tok::Whitespace(space), len)) = tok {
-                self.indent_stack.push(space);
-                Some((Tok::Indent, len))
-            }
-            else {
-                tok // Cannot be a comment, as line is not empty
-            }
+            self.handle_indent()
+        }
+    }
+
+    fn handle_dedent(&mut self, count: usize) -> Option<(Tok<'a>, usize)> {
+        let mut lookahead = self.text;
+        if let Some((Tok::Whitespace(space), len)) = next_token(&mut lookahead) {
+            // Next token is whitespace, incorrect indentation!
+            Some((Tok::Whitespace(space), len))
+        }
+        else {
+            // Properly dedented, set dedent mode and stack
+            self.state = LexState::Dedent(count);
+            let len = self.indent_stack.len();
+            self.indent_stack.truncate(len - count);
+            self.next_token()
+        }
+    }
+
+    fn handle_indent(&mut self) -> Option<(Tok<'a>, usize)> {
+        self.state = LexState::Normal;
+        let tok = next_token(&mut self.text);
+        if let Some((Tok::Whitespace(space), len)) = tok {
+            self.indent_stack.push(space);
+            Some((Tok::Indent, len))
+        }
+        else {
+            tok // Cannot be a comment, as line is not empty
         }
     }
 

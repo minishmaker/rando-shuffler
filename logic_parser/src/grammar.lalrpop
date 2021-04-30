@@ -10,7 +10,7 @@ grammar<'input>(input: &'input str);
 pub Tree = Scope*;
 
 Scope: Scope<'input> = {
-    <keyword:"keyword"> <name:"ident"> => Scope { children: ScopeChild::None, <> },
+    <keyword:"keyword"> <name:"ident"> "\n" => Scope { children: ScopeChild::None, <> },
     <keyword:"keyword"> <name:"ident"> ":" "\n" "indent" <c:Scope+> "dedent" => Scope { keyword, name, children: ScopeChild::Scope(c) },
     <keyword:"keyword"> <name:"ident"> ":" "\n" "indent" <c:RoomItem+> "dedent" => Scope { keyword, name, children: ScopeChild::Room(c) },
 };
