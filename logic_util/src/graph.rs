@@ -24,7 +24,8 @@ fn add_node<'a>(
     if let Some(&graph_node) = nodes.get(&node.name) {
         // Node already created, modify
         if node.modify {
-            let _graph_node = &mut graph[graph_node];
+            let mut graph_node = &mut graph[graph_node];
+            update_node(&mut graph_node, node);
             Ok(())
         }
         else {
@@ -37,6 +38,25 @@ fn add_node<'a>(
         nodes.insert(node.name, index);
         Ok(())
     }
+}
+
+fn update_node<'a>(graph_node: &mut Node<'a>, ast_node: ast::Node<'a>) {
+    // This probably isn't the correct semantics yet.
+    // Check for nodes that are modified vs added
+    let (replace, add): (Vec<_>, Vec<_>) = graph_node.1.iter_mut()
+        .zip(ast_node.children.into_iter())
+        .partition(|(old, new)| old.data == new.data);
+
+    // Replace descriptors that are the same as old ones
+    for (old, new) in replace.into_iter() {
+        *old = new;
+    }
+
+    // Add descriptors that are added
+    // Need to reallocate to fix lifetime issues
+    let add = add.into_iter().map(|(_, new)| new).collect::<Vec<_>>();
+    graph_node.1.reserve(add.len());
+    graph_node.1.extend(add);
 }
 
 fn add_connection<'a>(
@@ -80,18 +100,24 @@ fn add_connection<'a>(
     Ok(())
 }
 
-pub fn make_graph(room: Vec<RoomItem<'_>>) -> Result<DiGraph<Node<'_>, Edge<'_>>, GraphError<'_>> {
+pub fn make_graph(room: Vec<RoomItem<'_>>) -> Result<DiGraph<Node<'_>, Edge<'_>>, Vec<GraphError<'_>>> {
     let mut graph = DiGraph::new();
     let mut nodes = HashMap::new();
+    let mut errors = Vec::new();
 
     for item in room {
         match item {
-            RoomItem::Node(node) => add_node(node, &mut nodes, &mut graph)?,
-            RoomItem::Connection(connection) => add_connection(connection, &mut nodes, &mut graph)?
+            RoomItem::Node(node) => { add_node(node, &mut nodes, &mut graph).unwrap_or_else(|e| errors.push(e)); },
+            RoomItem::Connection(connection) => { add_connection(connection, &mut nodes, &mut graph).unwrap_or_else(|e| errors.push(e)); }
         }
     }
 
-    Ok(graph)
+    if errors.is_empty() {
+        Ok(graph)
+    }
+    else {
+        Err(errors)
+    }
 }
 
 impl Display for Node<'_> {
