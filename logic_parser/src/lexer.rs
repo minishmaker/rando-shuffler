@@ -113,6 +113,7 @@ lexer! {
     fn next_token(tok: 'a) -> Tok<'a>;
     COLON "^:" => |_| Tok::Colon,
     PERIOD r"^\." => |_| Tok::Period,
+    COMMA r"^," => |_| Tok::Comma,
     NEWLINE "^\n" => |_| Tok::Newline,
     PLUS r"^\+" => |_| Tok::Plus,
     STAR r"^\*" => |_| Tok::Star,
