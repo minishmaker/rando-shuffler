@@ -2,34 +2,34 @@ use std::fmt::{self, Display, Formatter};
 
 use super::lexer::{Ident, Arrow};
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Scope<'a> {
     pub keyword: &'a str,
     pub name: Ident<'a>,
     pub children: ScopeChild<'a>
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum ScopeChild<'a> {
     Scope(Vec<Scope<'a>>),
     Room(Vec<RoomItem<'a>>),
     None
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RoomItem<'a> {
     Node(Node<'a>),
     Connection(Connection<'a>),
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Node<'a> {
     pub name: Ident<'a>,
     pub children: Vec<Descriptor<'a>>,
     pub modify: bool
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Connection<'a> {
     pub left: Ident<'a>,
     pub right: Ident<'a>,
@@ -37,19 +37,19 @@ pub struct Connection<'a> {
     pub children: Vec<Descriptor<'a>>
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Descriptor<'a> {
     pub data: DescriptorData<'a>,
     pub children: Vec<Descriptor<'a>>
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct DescriptorData<'a> {
     pub keyword: &'a str,
     pub name: Option<NamespacedIdent<'a>>
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct NamespacedIdent<'a> {
     pub idents: Vec<Ident<'a>>
 }

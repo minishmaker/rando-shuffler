@@ -4,11 +4,12 @@ use petgraph::prelude::*;
 use petgraph::graph::DiGraph;
 use logic_parser::lexer::{Ident, Arrow};
 use logic_parser::ast::{self, RoomItem, Descriptor, Connection};
+use crate::logic::{self, Condition};
 
-#[derive(Debug)]
-pub struct Node<'a>(Ident<'a>, Vec<Descriptor<'a>>);
-#[derive(Debug)]
-pub struct Edge<'a>(Vec<Descriptor<'a>>);
+#[derive(Clone, Debug)]
+pub struct Node<'a>(pub Ident<'a>, pub Vec<Descriptor<'a>>);
+#[derive(Clone, Debug)]
+pub struct Edge<'a>(pub Vec<Condition<'a>>);
 
 pub enum GraphError<'a> {
     DuplicateNode(Ident<'a>),
@@ -67,10 +68,11 @@ fn add_connection<'a>(
     let &mut left = nodes.get_mut(&connection.left).ok_or(GraphError::MissingNode(connection.left))?;
     let &mut right = nodes.get_mut(&connection.right).ok_or(GraphError::MissingNode(connection.right))?;
 
+    let logic = connection.children.into_iter().map(logic::into_logic).collect::<Result<_, _>>().unwrap();
     match connection.arrow {
         Arrow::Right => {
             if !graph.contains_edge(left, right) {
-                graph.add_edge(left, right, Edge(connection.children))
+                graph.add_edge(left, right, Edge(logic))
             }
             else {
                 return Err(GraphError::DuplicateEdge(connection.left, Arrow::Right, connection.right))
@@ -78,7 +80,7 @@ fn add_connection<'a>(
         },
         Arrow::Left => {
             if !graph.contains_edge(right, left) {
-                graph.add_edge(right, left, Edge(connection.children))
+                graph.add_edge(right, left, Edge(logic))
             }
             else {
                 return Err(GraphError::DuplicateEdge(connection.left, Arrow::Left, connection.right))
@@ -91,8 +93,8 @@ fn add_connection<'a>(
                 return Err(GraphError::DuplicateEdge(connection.left, arrow, connection.right))
             }
             else {
-                graph.add_edge(left, right, Edge(connection.children.clone()));
-                graph.add_edge(right, left, Edge(connection.children))
+                graph.add_edge(left, right, Edge(logic.clone()));
+                graph.add_edge(right, left, Edge(logic))
             }
         }
     };
@@ -127,8 +129,18 @@ impl Display for Node<'_> {
 }
 
 impl Display for Edge<'_> {
-    fn fmt(&self, _: &mut Formatter) -> fmt::Result {
-        Ok(())
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self.0.len() {
+            0 => Ok(()),
+            1 => write!(f, "{}", self.0[0]),
+            _ => {
+                write!(f, "({})", self.0[0])?;
+                for item in self.0.iter().skip(1) {
+                    write!(f, " & ({})", item)?
+                }
+                Ok(())
+            }
+        }
     }
 }
 
