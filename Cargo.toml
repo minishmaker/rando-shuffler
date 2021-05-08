@@ -11,3 +11,4 @@ edition = "2018"
 petgraph = "0.5.1"
 logic_parser = { path = "logic_parser" }
 logic_util = { path = "logic_util" }
+regex = "1"

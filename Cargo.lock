@@ -314,6 +314,7 @@ dependencies = [
  "logic_parser",
  "logic_util",
  "petgraph",
+ "regex",
 ]
 
 [[package]]
