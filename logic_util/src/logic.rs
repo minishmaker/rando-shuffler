@@ -9,7 +9,7 @@ pub enum Condition<'a> {
     Other(Descriptor<'a>)
 }
 
-impl Condition<'_> {
+impl<'a> Condition<'a> {
     pub fn is_and(&self) -> bool {
         if let Condition::And(_) = self {
             true
@@ -66,11 +66,18 @@ impl Display for Condition<'_> {
             Condition::Or(i) => ("|", i),
             Condition::Other(d) => return write!(f, "{}", d)
         };
-        
+
         if !items.is_empty() {
-            write!(f, "{}", items[0])?;
-            for item in items.iter().skip(1) {
-                write!(f, " {} {}", delimiter, item)?;
+            for (index, item) in items.iter().enumerate() {
+                if index != 0 {
+                    write!(f, " {} ", delimiter)?;
+                }
+                if let Condition::Other(_) = item {
+                    write!(f, "{}", item)?;
+                }
+                else {
+                    write!(f, "({})", item)?;
+                }
             }
         }
 
