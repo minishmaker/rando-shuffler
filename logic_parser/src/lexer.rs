@@ -89,19 +89,19 @@ impl Display for Ident<'_> {
 macro_rules! lexer {
     (
         fn $fn_name:ident($match:ident : $life:lifetime) -> $output:ty;
-        $($regex_name:ident $regex:literal => $value:expr,)*
+        $($regex:literal => $value:expr,)*
     ) => {
         fn $fn_name<$life>(text: &mut &$life str) -> Option<($output, usize)> {
-            lazy_static! {
-                $(
-                    static ref $regex_name: Regex = Regex::new($regex).expect("Failed to create regex");
-                )*
-            }
-
             $(
-                if let Some(mat) = $regex_name.find(text) {
-                    *text = &text[mat.end()..];
-                    return Some(($value(mat.as_str()), mat.end()))
+                {
+                    lazy_static! {
+                        static ref PATTERN: Regex = Regex::new($regex).expect("Failed to create regex");
+                    }
+
+                    if let Some(mat) = PATTERN.find(text) {
+                        *text = &text[mat.end()..];
+                        return Some(($value(mat.as_str()), mat.end()))
+                    }
                 }
             )*
 
@@ -112,28 +112,28 @@ macro_rules! lexer {
 
 lexer! {
     fn next_token(tok: 'a) -> Tok<'a>;
-    COLON "^:" => |_| Tok::Colon,
-    PERIOD r"^\." => |_| Tok::Period,
-    COMMA r"^," => |_| Tok::Comma,
-    NEWLINE "^\n" => |_| Tok::Newline,
-    PLUS r"^\+" => |_| Tok::Plus,
-    STAR r"^\*" => |_| Tok::Star,
-    OPEN_PAREN r"^\(" => |_| Tok::OpenParen,
-    CLOSE_PAREN r"^\)" => |_| Tok::CloseParen,
-    AND r"^&" => |_| Tok::And,
-    OR r"^\|" => |_| Tok::Or,
-    ARROW_RIGHT r"^->" => |_| Tok::Arrow(Arrow::Right),
-    ARROW_BOTH r"^<->" => |_| Tok::Arrow(Arrow::Both),
-    NODE "^node" => |_| Tok::Node,
-    GLOBAL r"^g([A-Z]\w*)" => |t: &'a str| Tok::Global(Ident::Normal(&t[1..])),
-    GLOBAL_ESCAPED r#"^g"([A-Z]\w*)""# => |t: &'a str| Tok::Global(Ident::Escaped(&t[2..t.len()-1])),
-    IDENT r#"^([A-Z]\w*)"# => |t| Tok::Ident(Ident::Normal(t)),
-    WILDCARD "^_" => |_| Tok::Ident(Ident::Anon),
-    ESCAPED r#"^"[^"]*""# => |t: &'a str| Tok::Ident(Ident::Escaped(&t[1..t.len()-1])),
-    KEYWORD r"^[a-z]\w*" => |t| Tok::Keyword(t),
-    WHITESPACE r"^[ \t\r]+" => |t| Tok::Whitespace(t),
-    COMMENT "^#[^\n]*" => |t: &'a str| Tok::Comment(&t[..t.len()-1]),
-    UNKNOWN r"^\S+" => |t| Tok::Unk(t),
+    "^:" => |_| Tok::Colon,
+    r"^\." => |_| Tok::Period,
+    r"^," => |_| Tok::Comma,
+    "^\n" => |_| Tok::Newline,
+    r"^\+" => |_| Tok::Plus,
+    r"^\*" => |_| Tok::Star,
+    r"^\(" => |_| Tok::OpenParen,
+    r"^\)" => |_| Tok::CloseParen,
+    r"^&" => |_| Tok::And,
+    r"^\|" => |_| Tok::Or,
+    r"^->" => |_| Tok::Arrow(Arrow::Right),
+    r"^<->" => |_| Tok::Arrow(Arrow::Both),
+    "^node" => |_| Tok::Node,
+    r"^g([A-Z]\w*)" => |t: &'a str| Tok::Global(Ident::Normal(&t[1..])),
+    r#"^g"([A-Z]\w*)""# => |t: &'a str| Tok::Global(Ident::Escaped(&t[2..t.len()-1])),
+    r#"^([A-Z]\w*)"# => |t| Tok::Ident(Ident::Normal(t)),
+    "^_" => |_| Tok::Ident(Ident::Anon),
+    r#"^"[^"]*""# => |t: &'a str| Tok::Ident(Ident::Escaped(&t[1..t.len()-1])),
+    r"^[a-z]\w*" => Tok::Keyword,
+    r"^[ \t\r]+" => Tok::Whitespace,
+    "^#[^\n]*" => |t: &'a str| Tok::Comment(&t[..t.len()-1]),
+    r"^\S+" => Tok::Unk,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
