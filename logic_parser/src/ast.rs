@@ -46,21 +46,28 @@ pub struct Descriptor<'a> {
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct DescriptorData<'a> {
     pub keyword: &'a str,
-    pub name: Option<NamespacedIdent<'a>>
+    pub name: Option<FullIdent<'a>>
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct NamespacedIdent<'a> {
-    pub idents: Vec<Ident<'a>>
+pub enum FullIdent<'a> {
+    Namespaced { idents: Vec<Ident<'a>> },
+    Global { ident: Ident<'a> }
 }
 
-impl Display for NamespacedIdent<'_> {
+impl Display for FullIdent<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for name in self.idents.iter().take(self.idents.len() - 1) {
-            write!(f, "{}.", name)?;
+        match self {
+            FullIdent::Namespaced { ref idents } => {
+                // Write every ident, separated by .
+                for name in idents.iter().take(idents.len() - 1) {
+                    write!(f, "{}.", name)?;
+                }
+        
+                write!(f, "{}", idents.last().unwrap())
+            },
+            FullIdent::Global { ref ident } => write!(f, "g{}", ident)
         }
-
-        write!(f, "{}", self.idents.last().unwrap())
     }
 }
 

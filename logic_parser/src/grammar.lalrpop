@@ -2,7 +2,7 @@ use std::iter;
 use std::convert::Infallible;
 
 use super::lexer::{Tok, Ident, Arrow};
-use super::ast::{Scope, RoomItem, Descriptor, DescriptorData, ScopeChild, NamespacedIdent, Node, Connection};
+use super::ast::{Scope, RoomItem, Descriptor, DescriptorData, ScopeChild, FullIdent, Node, Connection};
 
 #[LALR]
 grammar<'input>(input: &'input str);
@@ -43,12 +43,15 @@ BlockDescriptor: Descriptor<'input> = {
     <d:DescriptorData> ":" <c:Descriptors> => Descriptor { data: d, children: c }
 };
 
-NamedDescriptor: DescriptorData<'input> = <keyword:"keyword"> <name:NamespacedIdent> => DescriptorData { keyword, name: Some(name) };
+NamedDescriptor: DescriptorData<'input> = <keyword:"keyword"> <name:FullIdent> => DescriptorData { keyword, name: Some(name) };
 
-NamespacedIdent: NamespacedIdent<'input> = <i:"ident"> <v:("." <"ident">)*> => {
-    let mut v = v;
-    v.insert(0, i);
-    NamespacedIdent { idents: v }
+FullIdent: FullIdent<'input> = {
+    <i:"ident"> <v:("." <"ident">)*> => {
+        let mut v = v;
+        v.insert(0, i);
+        FullIdent::Namespaced { idents: v }
+    },
+    <ident:"global"> => FullIdent::Global { ident }
 };
 
 LogicSugar: Descriptor<'input> = "(" <LogicSugarBody> ")";
@@ -92,6 +95,7 @@ extern {
         "node" => Tok::Node,
         "keyword" => Tok::Keyword(<&'input str>),
         "ident" => Tok::Ident(<Ident<'input>>),
+        "global" => Tok::Global(<Ident<'input>>),
         "arrow" => Tok::Arrow(<Arrow>),
         ":" => Tok::Colon,
         "." => Tok::Period,
@@ -101,6 +105,6 @@ extern {
         "&" => Tok::And,
         "|" => Tok::Or,
         "(" => Tok::OpenParen,
-        ")" => Tok::CloseParen
+        ")" => Tok::CloseParen,
     }
 }

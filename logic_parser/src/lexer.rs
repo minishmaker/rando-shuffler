@@ -19,6 +19,7 @@ pub fn lex(text: &str) -> impl Iterator<Item = LexResult<'_>> {
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Tok<'a> {
     Ident(Ident<'a>),
+    Global(Ident<'a>),
     Keyword(&'a str),
     Arrow(Arrow),
     Whitespace(&'a str),
@@ -36,7 +37,7 @@ pub enum Tok<'a> {
     CloseParen,
     And,
     Or,
-    Node
+    Node,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -69,7 +70,7 @@ impl Display for Arrow {
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Ident<'a> {
-    Wildcard,
+    Anon,
     Normal(&'a str),
     Escaped(&'a str)
 }
@@ -77,7 +78,7 @@ pub enum Ident<'a> {
 impl Display for Ident<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Ident::Wildcard => write!(f, "_"),
+            Ident::Anon => write!(f, "_"),
             Ident::Normal(s) => write!(f, "{}", s),
             Ident::Escaped(s) => write!(f, "\"{}\"", s)
         }
@@ -124,8 +125,10 @@ lexer! {
     ARROW_RIGHT r"^->" => |_| Tok::Arrow(Arrow::Right),
     ARROW_BOTH r"^<->" => |_| Tok::Arrow(Arrow::Both),
     NODE "^node" => |_| Tok::Node,
+    GLOBAL r"^g([A-Z]\w*)" => |t: &'a str| Tok::Global(Ident::Normal(&t[1..])),
+    GLOBAL_ESCAPED r#"^g"([A-Z]\w*)""# => |t: &'a str| Tok::Global(Ident::Escaped(&t[2..t.len()-1])),
     IDENT r#"^([A-Z]\w*)"# => |t| Tok::Ident(Ident::Normal(t)),
-    WILDCARD "^_" => |_| Tok::Ident(Ident::Wildcard),
+    WILDCARD "^_" => |_| Tok::Ident(Ident::Anon),
     ESCAPED r#"^"[^"]*""# => |t: &'a str| Tok::Ident(Ident::Escaped(&t[1..t.len()-1])),
     KEYWORD r"^[a-z]\w*" => |t| Tok::Keyword(t),
     WHITESPACE r"^[ \t\r]+" => |t| Tok::Whitespace(t),
