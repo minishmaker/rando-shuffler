@@ -4,6 +4,8 @@ use std::convert::Infallible;
 use regex::Regex;
 use lazy_static::lazy_static;
 
+use crate::Ident;
+
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 pub type LexResult<'a> = Spanned<Tok<'a>, usize, Infallible>;
 
@@ -64,23 +66,6 @@ impl Display for Arrow {
             Arrow::Left => write!(f, "<-"),
             Arrow::Right => write!(f, "->"),
             Arrow::Both => write!(f, "<->")
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub enum Ident<'a> {
-    Anon,
-    Normal(&'a str),
-    Escaped(&'a str)
-}
-
-impl Display for Ident<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Ident::Anon => write!(f, "_"),
-            Ident::Normal(s) => write!(f, "{}", s),
-            Ident::Escaped(s) => write!(f, "\"{}\"", s)
         }
     }
 }

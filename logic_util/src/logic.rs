@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use logic_parser::ast::{Descriptor};
+use logic_parser::logic::ast::Descriptor;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum Condition<'a> {
