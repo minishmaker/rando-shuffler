@@ -8,10 +8,10 @@ grammar(input: &str);
 
 pub Rules = Rule*;
 
-Rule: RuleDef<'input, S> =
+Rule: RuleDef<'input> =
     <name:"keyword"> "(" <values:Value*> ")" "=" <body:RuleBody> => RuleDef { <> };
 
-RuleBody: RuleBody<'input, S>  = {
+RuleBody: RuleBody<'input>  = {
     RefUnk,
     CountyLiteral => RuleBody::County(RuleBodyCounty::Constant(<>)),
     LinearComb => RuleBody::County(<>),
@@ -25,14 +25,14 @@ RuleBody: RuleBody<'input, S>  = {
     TruthyLiteral => RuleBody::Truthy(RuleBodyTruthy::Constant(<>))
 };
 
-RuleBodyCounty: RuleBodyCounty<'input, S> = {
+RuleBodyCounty: RuleBodyCounty<'input> = {
     CountyLiteral => RuleBodyCounty::Constant(<>),
     RefCounty,
     LinearComb,
     Count,
 };
 
-RuleBodyTruthy: RuleBodyTruthy<'input, S> = {
+RuleBodyTruthy: RuleBodyTruthy<'input> = {
     TruthyLiteral => RuleBodyTruthy::Constant(<>),
     RefTruthy,
     Access,
@@ -48,13 +48,13 @@ Ref = {
     <name:"keyword"> "(" <values:Value*> ")"
 }
 
-RefUnk: RuleBody<'input, S> = Ref => RuleBody::Reference(<>);
+RefUnk: RuleBody<'input> = Ref => RuleBody::Reference(<>);
 
 CountyLiteral: u32 = "num" => <>.parse::<u32>();
 
-RefCounty: RuleBodyCounty<'input, S> = Ref => RuleBodyCount::Reference(<>)
+RefCounty: RuleBodyCounty<'input> = Ref => RuleBodyCount::Reference(<>)
 
-LinearComb: RuleBodyCounty<'input, S> = <f:(<RuleBodyCounty> <("*" <CountyLiteral>)?)> <m:("+" <RuleBodyCounty> <("*" <CountyLiteral>)?>)> => {
+LinearComb: RuleBodyCounty<'input> = <f:(<RuleBodyCounty> <("*" <CountyLiteral>)?)> <m:("+" <RuleBodyCounty> <("*" <CountyLiteral>)?>)> => {
     let values = std::iter::once(f)
         .chain(m.into_iter())
         .map(|(n, c)| (n, c.unwrap_or_else(1)))
@@ -63,16 +63,21 @@ LinearComb: RuleBodyCounty<'input, S> = <f:(<RuleBodyCounty> <("*" <CountyLitera
     RuleBodyCounty::LinearComb(values)
 };
 
-Count: RuleBodyCounty<'input, S> = "+" "v" <"keyword"> "<-" <Relation> "-" <Value> "(" <RuleBodyTruthy> ")" => {
+Count: RuleBodyCounty<'input> = "+" "v" <"keyword"> "<-" <Relation> "-" <Value> "(" <RuleBodyTruthy> ")" => {
     RuleBodyTruthy::Exists(<>)
 };
 
-RefTruthy: RuleBodyTruthy<'input, S> = Ref => RuleBodyTruthy::Reference(<>);
+RefTruthy: RuleBodyTruthy<'input> = Ref => RuleBodyTruthy::Reference(<>);
 
-Access: RuleBodyTruthy<'input, S> = "[" Ref "]" => RuleBodyTruthy::Access(<>);
+Access: RuleBodyTruthy<'input> = "[" Ref "]" => RuleBodyTruthy::Access(<>);
 
-Compare: RuleBodyTruthy<'input, S> = <RuleBodyCounty> ">=" <CountyLiteral> => RuleBodyTruthy::Compare(<>);
+Compare: RuleBodyTruthy<'input> = <RuleBodyCounty> ">=" <CountyLiteral> => RuleBodyTruthy::Compare(<>);
 
-Exists: RuleBodyTruthy<'input, S> = "?" "v" <"keyword"> "<-" <Relation> "-" <Value> "(" <RuleBodyTruthy> ")" => {
+Exists: RuleBodyTruthy<'input> = "?" "v" <"keyword"> "<-" <Relation> "-" <Value> "(" <RuleBodyTruthy> ")" => {
     RuleBodyTruthy::Exists(<>)
 };
+
+match {
+    r"[a-z]\w*" => "keyword",
+    _
+}
