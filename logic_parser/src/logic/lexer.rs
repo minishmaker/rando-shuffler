@@ -110,6 +110,8 @@ lexer! {
     r"^->" => |_| Tok::Arrow(Arrow::Right),
     r"^<->" => |_| Tok::Arrow(Arrow::Both),
     "^node" => |_| Tok::Node,
+    "^and" => |_| Tok::And,
+    "^or" => |_| Tok::Or,
     r"^g([A-Z]\w*)" => |t: &'a str| Tok::Global(Ident::Normal(&t[1..])),
     r#"^g"([A-Z]\w*)""# => |t: &'a str| Tok::Global(Ident::Escaped(&t[2..t.len()-1])),
     r#"^([A-Z]\w*)"# => |t| Tok::Ident(Ident::Normal(t)),

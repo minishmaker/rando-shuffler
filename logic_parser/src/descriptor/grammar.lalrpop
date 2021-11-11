@@ -1,35 +1,82 @@
 use std::iter;
-use std::convert::Infallible;
 
-use super::ast::*;
+use crate::{Ident, FullIdent};
+use crate::descriptor::ast::*;
 
-#[LALR]
-grammar(input: &str);
+grammar;
 
 pub Rules = Rule*;
 
-Rule: RuleDef<'input> =
-    <name:"keyword"> "(" <values:Value*> ")" "=" <body:RuleBody> => RuleDef { <> };
+Rule: RuleDef<'input> = <name:"keyword"> "(" <values:Value*> ")" "=" <body:RuleBody> => RuleDef { <> };
 
-RuleBody: RuleBody<'input>  = {
+RuleBodyAll: RuleBody<'input> = {
+    RuleBody,
+    <d:RuleBody> <v:("," <RuleBodyTruthy>)+> => {
+        let d = match d {
+            // TODO: Improve this
+            RuleBody::County(_) => panic!("Unable to \"and\" with a county value!"),
+            RuleBody::Truthy(t) => t,
+            RuleBody::Reference(s, v) => RuleBodyTruthy::Reference(s, v)
+        };
+
+        let mut v = v;
+        v.push(d);
+        RuleBody::Truthy(RuleBodyTruthy::All(v))
+    },
+
+    <d:RuleBody> <m:("*" <CountyLiteral>)?>  <v:("+" <RuleBodyCounty> <("*" <CountyLiteral>)?>)+> => {
+        let d = match d {
+            // TODO: Improve this
+            RuleBody::Truthy(_) => panic!("Unable to add with a truthy value!"),
+            RuleBody::County(t) => t,
+            RuleBody::Reference(s, v) => RuleBodyCounty::Reference(s, v)
+        };
+
+        let v = v.into_iter()
+            .chain(iter::once((d, m)))
+            .map(|(n, c)| (n, c.unwrap_or(1)))
+            .collect();
+        RuleBody::County(RuleBodyCounty::LinearComb(v))
+    }
+};
+
+RuleBody: RuleBody<'input> = {
     RefUnk,
     CountyLiteral => RuleBody::County(RuleBodyCounty::Constant(<>)),
-    LinearComb => RuleBody::County(<>),
     Count => RuleBody::County(<>),
     Access => RuleBody::Truthy(<>),
     Compare => RuleBody::Truthy(<>),
     Exists => RuleBody::Truthy(<>),
-    All => RuleBody::Truthy(<>),
     Posterior => RuleBody::Truthy(<>),
     Prior => RuleBody::Truthy(<>),
     TruthyLiteral => RuleBody::Truthy(RuleBodyTruthy::Constant(<>))
 };
 
+RuleBodyCountyComb: RuleBodyCounty<'input> = {
+    RuleBodyCounty,
+    <f:(<RuleBodyCounty> <("*" <CountyLiteral>)?>)> <m:("+" <RuleBodyCounty> <("*" <CountyLiteral>)?>)+> => {
+        let values = std::iter::once(f)
+            .chain(m.into_iter())
+            .map(|(n, c)| (n, c.unwrap_or(1)))
+            .collect::<Vec<_>>();
+        
+        RuleBodyCounty::LinearComb(values)
+    }
+};
+
 RuleBodyCounty: RuleBodyCounty<'input> = {
     CountyLiteral => RuleBodyCounty::Constant(<>),
     RefCounty,
-    LinearComb,
     Count,
+};
+
+RuleBodyTruthyAll: RuleBodyTruthy<'input> = {
+    RuleBodyTruthy,
+    <f:RuleBodyTruthy> <v:("," <RuleBodyTruthy>)+> => {
+        let mut v = v;
+        v.push(f);
+        RuleBodyTruthy::All(v)
+    }
 };
 
 RuleBodyTruthy: RuleBodyTruthy<'input> = {
@@ -38,46 +85,109 @@ RuleBodyTruthy: RuleBodyTruthy<'input> = {
     Access,
     Compare,
     Exists,
-    All,
     Posterior,
     Prior
 };
 
-#[inline]
-Ref = {
-    <name:"keyword"> "(" <values:Value*> ")"
+Ref = <"keyword"> "(" <Value*> ")";
+
+Value: Value<'input> = {
+    "v" <"ident"> => Value::Var(<>),
+    FullIdent => Value::Const(<>)
+};
+
+FullIdent: FullIdent<'input> = {
+    <i:Ident> <v:("." <Ident>)*> => {
+        let mut v = v;
+        v.insert(0, i);
+        FullIdent::Namespaced { idents: v }
+    },
+    "global" => FullIdent::Global { ident: Ident::Normal(&<>[1..]) },
+    "global_escaped" => {
+        let full = <>;
+        let ident = Ident::Escaped(&full[2..full.len() - 1]);
+        FullIdent::Global { ident }
+    },
+};
+
+Ident: Ident<'input> = {
+    "ident" => Ident::Normal(<>),
+    "ident_escaped" => {
+        let full = <>;
+        Ident::Escaped(&full[1..full.len() - 1])
+    },
+};
+
+RefUnk: RuleBody<'input> = Ref => {
+    let (k, v) = <>;
+    RuleBody::Reference(k, v)
+};
+
+// Todo: Fix error handling
+CountyLiteral: u32 = r"[1-9][0-9]*" => <>.parse::<u32>().unwrap();
+
+RefCounty: RuleBodyCounty<'input> = Ref => {
+    let (k, v) = <>;
+    RuleBodyCounty::Reference(k, v)
+};
+
+Count: RuleBodyCounty<'input> = "+" "v" <k:"keyword"> "<-" <r:Relation> "-" <v:Value> "(" <s:RuleBodyTruthy> ")" => {
+    RuleBodyCounty::Count(k, r, v, Box::new(s))
+};
+
+TruthyLiteral: Oolean = {
+    "true" => Oolean::True,
+    "ool" => Oolean::Ool,
+    "false" => Oolean::False
 }
 
-RefUnk: RuleBody<'input> = Ref => RuleBody::Reference(<>);
-
-CountyLiteral: u32 = "num" => <>.parse::<u32>();
-
-RefCounty: RuleBodyCounty<'input> = Ref => RuleBodyCount::Reference(<>)
-
-LinearComb: RuleBodyCounty<'input> = <f:(<RuleBodyCounty> <("*" <CountyLiteral>)?)> <m:("+" <RuleBodyCounty> <("*" <CountyLiteral>)?>)> => {
-    let values = std::iter::once(f)
-        .chain(m.into_iter())
-        .map(|(n, c)| (n, c.unwrap_or_else(1)))
-        .collect::<Vec<_>>();
-    
-    RuleBodyCounty::LinearComb(values)
+RefTruthy: RuleBodyTruthy<'input> = Ref => {
+    let (k, v) = <>;
+    RuleBodyTruthy::Reference(k, v)
 };
 
-Count: RuleBodyCounty<'input> = "+" "v" <"keyword"> "<-" <Relation> "-" <Value> "(" <RuleBodyTruthy> ")" => {
-    RuleBodyTruthy::Exists(<>)
+Access: RuleBodyTruthy<'input> = "[" <Ref> "]" => {
+    let (k, v) = <>;
+    RuleBodyTruthy::Access(k, v)
 };
 
-RefTruthy: RuleBodyTruthy<'input> = Ref => RuleBodyTruthy::Reference(<>);
+Compare: RuleBodyTruthy<'input> = <v:RuleBodyCountyComb> ">=" <t:CountyLiteral> => RuleBodyTruthy::Compare(Box::new(v), t);
 
-Access: RuleBodyTruthy<'input> = "[" Ref "]" => RuleBodyTruthy::Access(<>);
+Exists: RuleBodyTruthy<'input> = "?" "v" <k:"keyword"> "<-" <r:Relation> "-" <v:Value> "(" <s:RuleBodyTruthy> ")" => {
+    RuleBodyTruthy::Exists(k, r, v, Box::new(s))
+};
 
-Compare: RuleBodyTruthy<'input> = <RuleBodyCounty> ">=" <CountyLiteral> => RuleBodyTruthy::Compare(<>);
+Relation = {
+    "ident",
+    "keyword",
+    "global"
+};
 
-Exists: RuleBodyTruthy<'input> = "?" "v" <"keyword"> "<-" <Relation> "-" <Value> "(" <RuleBodyTruthy> ")" => {
-    RuleBodyTruthy::Exists(<>)
+Posterior: RuleBodyTruthy<'input> = "!" "[" <StateBodies> "]" => RuleBodyTruthy::CheckPosterior(<>);
+
+Prior: RuleBodyTruthy<'input> = "?" "[" <StateBodies> "]" => RuleBodyTruthy::CheckPrior(<>);
+
+StateBodies: Vec<StateBody<'input>> = <f:("~"? Value)> <v:("," <"~"?> <Value>)*> ","? => {
+    v.into_iter()
+        .chain(iter::once(f))
+        .map(|(n, i)| if n.is_some() {
+            StateBody::NotSet(i)
+        }
+        else {
+            StateBody::Set(i)
+        })
+        .collect()
 };
 
 match {
+    "and",
+    "or",
+    r"g[A-Z]\w*" => "global",
+    r#"g"[^"]*""# => "global_escaped",
+}
+else {
     r"[a-z]\w*" => "keyword",
+    r"[A-Z]\w*" => "ident",
+    r#"g"[^"].""# => "ident_escaped",
     _
 }

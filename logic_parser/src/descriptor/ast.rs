@@ -1,26 +1,10 @@
 use crate::FullIdent;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct RuleDecl<'a> {
-    name: &'a str,
-    data_type: DataType,
-    stateful: bool,
-    arity: u32,
-    roles: BitFlags<Role>
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct ConsumerDecl {
-    name: &'a str,
-    lock: &'a str,
-    key: &'a str
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct RuleDef<'a> {
-    name: &'a str,
-    values: Vec<&'a str>,
-    body: RuleBody<'a>
+    pub name: &'a str,
+    pub values: Vec<Value<'a>>,
+    pub body: RuleBody<'a>
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -43,26 +27,33 @@ pub enum RuleBody<'a> {
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RuleBodyCounty<'a> {
-    Constant(Literal<County>),
+    Constant(u32),
     Reference(&'a str, Vec<Value<'a>>),
     LinearComb(Vec<(RuleBodyCounty<'a>, u32)>),
-    Count(&'a str, Relation, Value<'a>, Box<RuleBodyTruthy<'a>>)
+    Count(&'a str, &'a str, Value<'a>, Box<RuleBodyTruthy<'a>>)
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RuleBodyTruthy<'a> {
-    Constant(Literal<Truthy>),
+    Constant(Oolean),
     Reference(&'a str, Vec<Value<'a>>),
-    Access(&'a str, Value<'a>),
+    Access(&'a str, Vec<Value<'a>>),
     Compare(Box<RuleBodyCounty<'a>>, u32),
-    Exists(&'a str, Relation, Value<'a>, Box<RuleBodyTruthy<'a>>),
+    Exists(&'a str, &'a str, Value<'a>, Box<RuleBodyTruthy<'a>>),
     All(Vec<RuleBodyTruthy<'a>>),
-    CheckPosterior(Vec<StateBody>),
-    CheckPrior(Vec<StateBody>),
+    CheckPosterior(Vec<StateBody<'a>>),
+    CheckPrior(Vec<StateBody<'a>>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum StateBody<'a> {
     Set(Value<'a>),
     NotSet(Value<'a>)
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
+pub enum Oolean {
+    False,
+    Ool,
+    True
 }

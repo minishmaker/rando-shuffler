@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use petgraph::prelude::*;
 use petgraph::graph::DiGraph;
-use logic_parser::lexer::{Ident, Arrow};
-use logic_parser::ast::{self, RoomItem, Descriptor, Connection};
-use crate::logic::{self, Condition};
+use logic_parser::Ident;
+use logic_parser::logic::lexer::Arrow;
+use logic_parser::logic::ast::{self, Connection, Descriptor, EdgeLogic, RoomItem};
 
 #[derive(Clone, Debug)]
 pub struct Node<'a>(pub Ident<'a>, pub Vec<Descriptor<'a>>);
 #[derive(Clone, Debug)]
-pub struct Edge<'a>(pub Vec<Condition<'a>>);
+pub struct Edge<'a>(pub Vec<EdgeLogic<'a>>);
 
 pub enum GraphError<'a> {
     DuplicateNode(Ident<'a>),
@@ -46,7 +46,7 @@ fn update_node<'a>(graph_node: &mut Node<'a>, ast_node: ast::Node<'a>) {
     // Check for nodes that are modified vs added
     let (replace, add): (Vec<_>, Vec<_>) = graph_node.1.iter_mut()
         .zip(ast_node.children.into_iter())
-        .partition(|(old, new)| old.data == new.data);
+        .partition(|(old, new)| old == &new);
 
     // Replace descriptors that are the same as old ones
     for (old, new) in replace.into_iter() {
@@ -68,7 +68,7 @@ fn add_connection<'a>(
     let &mut left = nodes.get_mut(&connection.left).ok_or(GraphError::MissingNode(connection.left))?;
     let &mut right = nodes.get_mut(&connection.right).ok_or(GraphError::MissingNode(connection.right))?;
 
-    let logic = connection.children.into_iter().map(logic::into_logic).collect::<Result<_, _>>().unwrap();
+    let logic = connection.logic;
     match connection.arrow {
         Arrow::Right => {
             if !graph.contains_edge(left, right) {

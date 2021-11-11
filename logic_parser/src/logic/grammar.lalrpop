@@ -1,10 +1,10 @@
-use std::iter;
 use std::convert::Infallible;
 
-use super::lexer::{Tok, Ident, Arrow};
-use super::ast::{Scope, RoomItem, Descriptor, DescriptorData, ScopeChild, FullIdent, Node, Connection};
+use crate::{Ident, FullIdent};
 
-#[LALR]
+use super::lexer::{Tok, Arrow};
+use super::ast::*;
+
 grammar<'input>(input: &'input str);
 
 pub Tree = Scope*;
@@ -18,32 +18,25 @@ Scope: Scope<'input> = {
 RoomItem: RoomItem<'input> = {
     "node" <name:"ident"> "\n" => RoomItem::Node(Node { <>, children: Vec::new(), modify: false }),
     "node" <name:"ident"> <m:"+"?> ":" <children:Descriptors> => RoomItem::Node(Node { name, children, modify: m.is_some() }),
-    <left:"ident"> <arrow:"arrow"> <right:"ident"> "\n" => RoomItem::Connection(Connection { children: Vec::new(), <>}),
-    <left:"ident"> <arrow:"arrow"> <right:"ident"> ":" <children:Descriptors> => RoomItem::Connection(Connection { <> })
+    <left:"ident"> <arrow:"arrow"> <right:"ident"> "\n" => RoomItem::Connection(Connection { logic: Vec::new(), <>}),
+    <left:"ident"> <arrow:"arrow"> <right:"ident"> ":" <logic:EdgeLogic> => RoomItem::Connection(Connection { <> })
 };
 
 Descriptors: Vec<Descriptor<'input>> = {
-    "\n" "indent" <BlockDescriptor+> "dedent",
-    <d:DescriptorData> <v:("," <DescriptorData>)*> ","? "\n" => {
-        v.into_iter()
-            .chain(iter::once(d))
-            .map(|d| Descriptor { data: d, children: Vec::new() })
-            .collect()
-    },
-    <LogicSugar> "\n" => vec![<>]
+    "\n" "indent" <(<Descriptor> "\n")+> "dedent",
+    InlineDescriptors
 };
 
-DescriptorData: DescriptorData<'input> = {
-    <NamedDescriptor>,
-    <keyword:"keyword"> => DescriptorData { <>, name: None }
+#[inline]
+InlineDescriptors: Vec<Descriptor<'input>> = <d:Descriptor> <v:("," <Descriptor>)*> ","? "\n" => {
+    let mut v = v;
+    v.insert(0, d); // Order matters for errors
+    v
 };
 
-BlockDescriptor: Descriptor<'input> = {
-    <DescriptorData> "\n" => Descriptor { data: <>, children: Vec::new() },
-    <d:DescriptorData> ":" <c:Descriptors> => Descriptor { data: d, children: c }
+Descriptor: Descriptor<'input> = {
+    <keyword:"keyword"> <idents:FullIdent*> => Descriptor { keyword, idents }
 };
-
-NamedDescriptor: DescriptorData<'input> = <keyword:"keyword"> <name:FullIdent> => DescriptorData { keyword, name: Some(name) };
 
 FullIdent: FullIdent<'input> = {
     <i:"ident"> <v:("." <"ident">)*> => {
@@ -54,34 +47,41 @@ FullIdent: FullIdent<'input> = {
     <ident:"global"> => FullIdent::Global { ident }
 };
 
-LogicSugar: Descriptor<'input> = "(" <LogicSugarBody> ")";
 
-LogicSugarBody: Descriptor<'input> = {
+EdgeLogic: Vec<EdgeLogic<'input>> = {
+    <LogicSugar> "\n" => vec![<>],
+    <InlineDescriptors> "\n" => <>.into_iter().map(EdgeLogic::Descriptor).collect(),
+    "\n" "indent" <(<EdgeTree> "\n")+> "dedent"
+};
+
+EdgeTree: EdgeLogic<'input> = {
+    "&" ":" <EdgeLogic> => EdgeLogic::And(<>),
+    "|" ":" <EdgeLogic> => EdgeLogic::Or(<>),
+    Descriptor => EdgeLogic::Descriptor(<>),
+};
+
+LogicSugar: EdgeLogic<'input> = "(" <LogicSugarBody> ")";
+
+LogicSugarBody: EdgeLogic<'input> = {
     And,
     Or
 };
 
-And: Descriptor<'input> = <k: ConditionItem> <v:("&" <ConditionItem>)*> => Descriptor {
-    data: DescriptorData { keyword: "and", name: None },
-    children: {
-        let mut v = v;
-        v.push(k);
-        v
-    }
+And: EdgeLogic<'input> = <k: ConditionItem> <v:("&" <ConditionItem>)*> => {
+    let mut v = v;
+    v.push(k);
+    EdgeLogic::And(v)
 };
 
-Or: Descriptor<'input> = <k: ConditionItem> <v:("|" <ConditionItem>)+> => Descriptor {
-    data: DescriptorData { keyword: "or", name: None },
-    children: {
-        let mut v = v;
-        v.push(k);
-        v
-    }
+Or: EdgeLogic<'input> = <k: ConditionItem> <v:("|" <ConditionItem>)+> => {
+    let mut v = v;
+    v.push(k);
+    EdgeLogic::Or(v)
 };
 
-ConditionItem: Descriptor<'input> = {
-    <data:NamedDescriptor> => Descriptor { children: Vec::new(), <> },
-    LogicSugar
+ConditionItem: EdgeLogic<'input> = {
+    LogicSugar,
+    Descriptor => EdgeLogic::Descriptor(<>)
 };
 
 extern {

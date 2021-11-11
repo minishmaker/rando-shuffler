@@ -4,7 +4,7 @@ pub mod lexer;
 
 use lalrpop_util::lalrpop_mod;
 
-lalrpop_mod!(pub grammar);
+lalrpop_mod!(pub grammar, "/src/logic/grammar.rs");
 
 use std::convert::Infallible;
 

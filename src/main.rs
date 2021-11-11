@@ -2,13 +2,13 @@ use std::io::{self, Read};
 use std::collections::HashMap;
 use petgraph::dot::Dot;
 use regex::Regex;
-use logic_parser::ast::{ScopeChild};
+use logic_parser::logic::ast::{ScopeChild};
 use logic_util::graph;
 
 fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
-    let tree = match logic_parser::parse(&input) {
+    let tree = match logic_parser::logic::parse(&input) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("Parse error: {:?}", e);
@@ -24,7 +24,6 @@ fn main() -> io::Result<()> {
                 if let ScopeChild::Room(room) = room.children {
                     let graph = graph::make_graph(room);
                     if let Ok(graph) = graph {
-                        //let graph = remove_parallel_logic(graph);
                         let dot = Dot::new(&graph);
                         let graph_string = format!("{}", dot);
                         println!("{}", concentrate_edges(graph_string));
