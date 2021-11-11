@@ -1,9 +1,9 @@
-use std::io::{self, Read};
-use std::collections::HashMap;
+use logic_parser::logic::ast::ScopeChild;
+use logic_util::graph;
 use petgraph::dot::Dot;
 use regex::Regex;
-use logic_parser::logic::ast::{ScopeChild};
-use logic_util::graph;
+use std::collections::HashMap;
+use std::io::{self, Read};
 
 fn main() -> io::Result<()> {
     let mut input = String::new();
@@ -27,8 +27,7 @@ fn main() -> io::Result<()> {
                         let dot = Dot::new(&graph);
                         let graph_string = format!("{}", dot);
                         println!("{}", concentrate_edges(graph_string));
-                    }
-                    else {
+                    } else {
                         errored = true;
                         for error in graph.unwrap_err() {
                             eprintln!("{}", error);
@@ -56,13 +55,15 @@ fn concentrate_edges(graph: String) -> String {
         let to = captures[2].parse::<u32>().unwrap();
         if let Some(logic) = edges.get(&(from, to)) {
             if *logic == &captures[3] {
-                let first = format!("{} -> {} [ label = \"{}\" ]", to, from ,logic);
-                let replacement = format!("{} -> {} [ label = \"{}\", dir = \"both\" ]", to, from, &captures[3]);
+                let first = format!("{} -> {} [ label = \"{}\" ]", to, from, logic);
+                let replacement = format!(
+                    "{} -> {} [ label = \"{}\", dir = \"both\" ]",
+                    to, from, &captures[3]
+                );
                 output = output.replace(&first, &replacement);
                 output = output.replace(&captures[0], "");
             }
-        }
-        else {
+        } else {
             edges.insert((to, from), captures.get(3).unwrap().as_str());
         }
     }

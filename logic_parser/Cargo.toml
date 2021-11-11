@@ -2,7 +2,7 @@
 name = "logic_parser"
 version = "0.1.0"
 authors = ["berylliosis <berylliumninja@gmail.com>"]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,6 +11,6 @@ build = "build.rs"
 lalrpop = { version = "0.19.4", default-features = false, features = ["lexer"] }
 
 [dependencies]
-lalrpop-util = "0.19.4"
+lalrpop-util = { version = "0.19.4", features = ["lexer"] }
 regex = "1"
 lazy_static = "1.4.0"

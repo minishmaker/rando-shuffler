@@ -1,8 +1,8 @@
-use std::fmt::{self, Display, Formatter};
 use std::convert::Infallible;
+use std::fmt::{self, Display, Formatter};
 
-use regex::Regex;
 use lazy_static::lazy_static;
+use regex::Regex;
 
 use crate::Ident;
 
@@ -14,7 +14,7 @@ pub fn lex(text: &str) -> impl Iterator<Item = LexResult<'_>> {
         text,
         index: 0,
         indent_stack: Vec::new(),
-        state: LexState::Normal
+        state: LexState::Normal,
     }
 }
 
@@ -55,7 +55,7 @@ impl Arrow {
             (true, true) => Some(Arrow::Both),
             (true, false) => Some(Arrow::Left),
             (false, true) => Some(Arrow::Right),
-            (false, false) => None
+            (false, false) => None,
         }
     }
 }
@@ -65,7 +65,7 @@ impl Display for Arrow {
         match self {
             Arrow::Left => write!(f, "<-"),
             Arrow::Right => write!(f, "->"),
-            Arrow::Both => write!(f, "<->")
+            Arrow::Both => write!(f, "<->"),
         }
     }
 }
@@ -134,8 +134,8 @@ enum LexState {
 struct Lex<'a> {
     text: &'a str,
     index: usize,
-    indent_stack: Vec<&'a str>, 
-    state: LexState
+    indent_stack: Vec<&'a str>,
+    state: LexState,
 }
 
 impl<'a> Lex<'a> {
@@ -148,8 +148,7 @@ impl<'a> Lex<'a> {
                 if *count > 0 {
                     *count -= 1;
                     Some((Tok::Dedent, 0))
-                }
-                else {
+                } else {
                     self.state = LexState::Normal;
                     self.next_normal()
                 }
@@ -160,27 +159,25 @@ impl<'a> Lex<'a> {
     /// Get the next token under normal circumstances, filtering out whitespace/comments and checking for newlines
     fn next_normal(&mut self) -> Option<(Tok<'a>, usize)> {
         match next_token(&mut self.text) {
-            Some((Tok::Newline, _)) => { // Comment includes newline
+            Some((Tok::Newline, _)) => {
                 // Ignore newline if next line is empty
                 if self.line_empty() && self.text.len() > 0 {
                     self.next_normal()
-                }
-                else {
+                } else {
                     self.state = LexState::Newline;
                     Some((Tok::Newline, 1))
                 }
-            },
-            Some((Tok::Whitespace(_), len))
-                | Some((Tok::Comment(_), len)) => {
-                    self.index += len;
-                    self.next_normal()
-            }, 
+            }
+            Some((Tok::Whitespace(_), len)) | Some((Tok::Comment(_), len)) => {
+                self.index += len;
+                self.next_normal()
+            }
             None if self.indent_stack.len() > 0 => {
                 // Add trailing newline
                 self.text = "\n";
                 self.next_normal()
-            },
-            t => t
+            }
+            t => t,
         }
     }
 
@@ -198,8 +195,7 @@ impl<'a> Lex<'a> {
             if indent == subsection {
                 indents += 1;
                 index += indent.len();
-            }
-            else {
+            } else {
                 break;
             }
         }
@@ -210,8 +206,7 @@ impl<'a> Lex<'a> {
         let len = self.indent_stack.len();
         if indents < len {
             self.handle_dedent(len - indents)
-        }
-        else {
+        } else {
             self.handle_indent()
         }
     }
@@ -222,8 +217,7 @@ impl<'a> Lex<'a> {
         if let Some((Tok::Whitespace(space), len)) = next_token(&mut lookahead) {
             // Next token is whitespace, incorrect indentation!
             Some((Tok::Whitespace(space), len))
-        }
-        else {
+        } else {
             // Properly dedented, set dedent mode and stack
             self.state = LexState::Dedent(count);
             let len = self.indent_stack.len();
@@ -241,17 +235,16 @@ impl<'a> Lex<'a> {
             // Next token is whitespace, so it's another indent
             self.indent_stack.push(space);
             Some((Tok::Indent, len))
-        }
-        else {
+        } else {
             // Next token is not whitespace
-            tok 
+            tok
         }
     }
 
     fn line_empty(&mut self) -> bool {
         // Get first line
         let mut line = self.text.lines().next().unwrap_or("");
-        
+
         // Tokenize
         while let Some(tok) = next_token(&mut line) {
             match tok {
@@ -259,7 +252,7 @@ impl<'a> Lex<'a> {
                 (Tok::Whitespace(_), _) => continue,
                 (Tok::Newline, _) => break,
                 (Tok::Comment(_), _) => break,
-                _ => return false
+                _ => return false,
             }
         }
 

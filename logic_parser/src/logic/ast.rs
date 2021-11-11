@@ -1,20 +1,20 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::{Ident, FullIdent};
 use super::lexer::Arrow;
+use crate::{FullIdent, Ident};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Scope<'a> {
     pub keyword: &'a str,
     pub name: Ident<'a>,
-    pub children: ScopeChild<'a>
+    pub children: ScopeChild<'a>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum ScopeChild<'a> {
     Scope(Vec<Scope<'a>>),
     Room(Vec<RoomItem<'a>>),
-    None
+    None,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -27,7 +27,7 @@ pub enum RoomItem<'a> {
 pub struct Node<'a> {
     pub name: Ident<'a>,
     pub children: Vec<Descriptor<'a>>,
-    pub modify: bool
+    pub modify: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -35,20 +35,20 @@ pub struct Connection<'a> {
     pub left: Ident<'a>,
     pub right: Ident<'a>,
     pub arrow: Arrow,
-    pub logic: Vec<EdgeLogic<'a>>
+    pub logic: Vec<EdgeLogic<'a>>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Descriptor<'a> {
     pub keyword: &'a str,
-    pub idents: Vec<FullIdent<'a>>
+    pub idents: Vec<FullIdent<'a>>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum EdgeLogic<'a> {
     And(Vec<EdgeLogic<'a>>),
     Or(Vec<EdgeLogic<'a>>),
-    Descriptor(Descriptor<'a>)
+    Descriptor(Descriptor<'a>),
 }
 
 impl EdgeLogic<'_> {
@@ -83,16 +83,15 @@ impl Display for EdgeLogic<'_> {
         let mut children = children.iter();
         let first = match children.next() {
             Some(f) => f,
-            None => return Ok(())
+            None => return Ok(()),
         };
-        
+
         write!(f, "{}", first)?;
         for child in children {
             write!(f, " {} ", separator)?;
             if child.is_condition() {
                 write!(f, "({})", child)?;
-            }
-            else {
+            } else {
                 write!(f, "{}", child)?;
             }
         }
