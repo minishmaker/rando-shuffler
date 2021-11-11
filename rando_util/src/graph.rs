@@ -1,6 +1,6 @@
-use logic_parser::logic::ast::{self, Connection, Descriptor, EdgeLogic, RoomItem};
-use logic_parser::logic::lexer::Arrow;
-use logic_parser::Ident;
+use rando_parser::logic::ast::{self, Connection, Descriptor, EdgeLogic, RoomItem};
+use rando_parser::logic::lexer::Arrow;
+use rando_parser::Ident;
 use petgraph::graph::DiGraph;
 use petgraph::prelude::*;
 use std::collections::HashMap;

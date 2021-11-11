@@ -9,6 +9,6 @@ edition = "2021"
 
 [dependencies]
 petgraph = "0.5.1"
-logic_parser = { path = "logic_parser" }
-logic_util = { path = "logic_util" }
+rando_parser = { path = "rando_parser" }
+rando_util = { path = "rando_util" }
 regex = "1"

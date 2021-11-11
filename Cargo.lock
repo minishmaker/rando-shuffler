@@ -234,24 +234,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "logic_parser"
-version = "0.1.0"
-dependencies = [
- "lalrpop",
- "lalrpop-util",
- "lazy_static",
- "regex",
-]
-
-[[package]]
-name = "logic_util"
-version = "0.1.0"
-dependencies = [
- "logic_parser",
- "petgraph",
-]
-
-[[package]]
 name = "memchr"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -314,13 +296,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
+name = "rando_parser"
+version = "0.1.0"
+dependencies = [
+ "lalrpop",
+ "lalrpop-util",
+ "lazy_static",
+ "regex",
+]
+
+[[package]]
 name = "rando_shuffler"
 version = "0.1.0"
 dependencies = [
- "logic_parser",
- "logic_util",
  "petgraph",
+ "rando_parser",
+ "rando_util",
  "regex",
+]
+
+[[package]]
+name = "rando_util"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+ "rando_parser",
 ]
 
 [[package]]

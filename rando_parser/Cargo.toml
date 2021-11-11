@@ -1,5 +1,5 @@
 [package]
-name = "logic_parser"
+name = "rando_parser"
 version = "0.1.0"
 authors = ["berylliosis <berylliumninja@gmail.com>"]
 edition = "2021"

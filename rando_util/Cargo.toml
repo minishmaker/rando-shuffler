@@ -1,5 +1,5 @@
 [package]
-name = "logic_util"
+name = "rando_util"
 version = "0.1.0"
 authors = ["berylliosis <berylliumninja@gmail.com>"]
 edition = "2021"
@@ -7,5 +7,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-logic_parser = { path = "../logic_parser" }
+rando_parser = { path = "../rando_parser" }
 petgraph = "0.5.1"
