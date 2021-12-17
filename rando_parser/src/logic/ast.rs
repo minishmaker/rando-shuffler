@@ -1,47 +1,52 @@
 use std::fmt::{self, Display, Formatter};
 
-use super::lexer::Arrow;
-use crate::{FullIdent, Ident};
+use crate::{common::Span, FullIdent, Ident};
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+pub enum Arrow {
+    Right,
+    Left,
+    Both,
+}
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Scope<'a> {
-    pub keyword: &'a str,
-    pub name: Ident<'a>,
-    pub children: ScopeChild<'a>,
+    pub keyword: Span<&'a str>,
+    pub ident: Span<Ident<'a>>,
+    pub children: Option<ScopeChild<'a>>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum ScopeChild<'a> {
     Scope(Vec<Scope<'a>>),
     Room(Vec<RoomItem<'a>>),
-    None,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RoomItem<'a> {
     Node(Node<'a>),
-    Connection(Connection<'a>),
+    Edge(Edge<'a>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Node<'a> {
-    pub name: Ident<'a>,
+    pub name: Span<Ident<'a>>,
     pub children: Vec<Descriptor<'a>>,
     pub modify: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct Connection<'a> {
-    pub left: Ident<'a>,
-    pub right: Ident<'a>,
-    pub arrow: Arrow,
+pub struct Edge<'a> {
+    pub left: Span<Ident<'a>>,
+    pub right: Span<Ident<'a>>,
+    pub arrow: Span<Arrow>,
     pub logic: Vec<EdgeLogic<'a>>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Descriptor<'a> {
-    pub keyword: &'a str,
-    pub idents: Vec<FullIdent<'a>>,
+    pub keyword: Span<&'a str>,
+    pub idents: Vec<Span<FullIdent<'a>>>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -59,8 +64,8 @@ impl EdgeLogic<'_> {
 
 impl Display for Descriptor<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.keyword)?;
-        for ident in &self.idents {
+        write!(f, "{}", self.keyword.1)?;
+        for (_, ident, _) in &self.idents {
             write!(f, " {}", ident)?;
         }
 
@@ -97,5 +102,26 @@ impl Display for EdgeLogic<'_> {
         }
 
         Ok(())
+    }
+}
+
+impl Arrow {
+    pub fn new(left: bool, right: bool) -> Option<Arrow> {
+        match (left, right) {
+            (true, true) => Some(Arrow::Both),
+            (true, false) => Some(Arrow::Left),
+            (false, true) => Some(Arrow::Right),
+            (false, false) => None,
+        }
+    }
+}
+
+impl Display for Arrow {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Arrow::Left => write!(f, "<-"),
+            Arrow::Right => write!(f, "->"),
+            Arrow::Both => write!(f, "<->"),
+        }
     }
 }

@@ -1,0 +1,16 @@
+
+
+# Comment
+area A:
+    room B:
+        zone C:
+            node A: thing One, thing Two Three, thing Four # Comment
+            node B
+        # Comment
+
+
+            A -> B: (desc A | desc B | desc C)
+    room C:
+        dedent
+        
+threedent

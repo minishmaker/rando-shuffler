@@ -1,6 +1,6 @@
+use petgraph::dot::Dot;
 use rando_parser::logic::ast::ScopeChild;
 use rando_util::graph;
-use petgraph::dot::Dot;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{self, Read};
@@ -8,7 +8,7 @@ use std::io::{self, Read};
 fn main() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
-    let tree = match rando_parser::logic::parse(&input) {
+    /*let tree = match rando_parser::logic::parse(&input) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("Parse error: {:?}", e);
@@ -41,7 +41,7 @@ fn main() -> io::Result<()> {
     // Exit with code 1 if anything failed
     if errored {
         std::process::exit(1)
-    }
+    }*/
 
     Ok(())
 }

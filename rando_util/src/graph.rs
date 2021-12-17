@@ -1,8 +1,7 @@
-use rando_parser::logic::ast::{self, Connection, Descriptor, EdgeLogic, RoomItem};
-use rando_parser::logic::lexer::Arrow;
-use rando_parser::Ident;
 use petgraph::graph::DiGraph;
 use petgraph::prelude::*;
+use rando_parser::logic::ast::{self, Arrow, Descriptor, Edge as AstEdge, EdgeLogic, RoomItem};
+use rando_parser::{FullIdent, Ident};
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
@@ -12,9 +11,9 @@ pub struct Node<'a>(pub Ident<'a>, pub Vec<Descriptor<'a>>);
 pub struct Edge<'a>(pub Vec<EdgeLogic<'a>>);
 
 pub enum GraphError<'a> {
-    DuplicateNode(Ident<'a>),
-    MissingNode(Ident<'a>),
-    DuplicateEdge(Ident<'a>, Arrow, Ident<'a>),
+    DuplicateNode((usize, Ident<'a>, usize)),
+    MissingNode((usize, Ident<'a>, usize)),
+    DuplicateEdge(usize, Ident<'a>, Arrow, Ident<'a>, usize),
 }
 
 fn add_node<'a>(
@@ -22,7 +21,7 @@ fn add_node<'a>(
     nodes: &mut HashMap<Ident<'a>, NodeIndex>,
     graph: &mut DiGraph<Node<'a>, Edge<'a>>,
 ) -> Result<(), GraphError<'a>> {
-    if let Some(&graph_node) = nodes.get(&node.name) {
+    if let Some(&graph_node) = nodes.get(&node.name.1) {
         // Node already created, modify
         if node.modify {
             let mut graph_node = &mut graph[graph_node];
@@ -33,8 +32,8 @@ fn add_node<'a>(
         }
     } else {
         // Create node
-        let index = graph.add_node(Node(node.name, node.children));
-        nodes.insert(node.name, index);
+        let index = graph.add_node(Node(node.name.1, node.children));
+        nodes.insert(node.name.1, index);
         Ok(())
     }
 }
@@ -61,27 +60,29 @@ fn update_node<'a>(graph_node: &mut Node<'a>, ast_node: ast::Node<'a>) {
 }
 
 fn add_connection<'a>(
-    connection: Connection<'a>,
+    connection: AstEdge<'a>,
     nodes: &mut HashMap<Ident<'a>, NodeIndex>,
     graph: &mut DiGraph<Node<'a>, Edge<'a>>,
 ) -> Result<(), GraphError<'a>> {
     let &mut left = nodes
-        .get_mut(&connection.left)
+        .get_mut(&connection.left.1)
         .ok_or(GraphError::MissingNode(connection.left))?;
     let &mut right = nodes
-        .get_mut(&connection.right)
+        .get_mut(&connection.right.1)
         .ok_or(GraphError::MissingNode(connection.right))?;
 
     let logic = connection.logic;
-    match connection.arrow {
+    match connection.arrow.1 {
         Arrow::Right => {
             if !graph.contains_edge(left, right) {
                 graph.add_edge(left, right, Edge(logic))
             } else {
                 return Err(GraphError::DuplicateEdge(
-                    connection.left,
+                    connection.left.0,
+                    connection.left.1,
                     Arrow::Right,
-                    connection.right,
+                    connection.right.1,
+                    connection.right.2,
                 ));
             }
         }
@@ -90,9 +91,11 @@ fn add_connection<'a>(
                 graph.add_edge(right, left, Edge(logic))
             } else {
                 return Err(GraphError::DuplicateEdge(
-                    connection.left,
+                    connection.left.0,
+                    connection.left.1,
                     Arrow::Left,
-                    connection.right,
+                    connection.right.1,
+                    connection.right.2,
                 ));
             }
         }
@@ -101,9 +104,11 @@ fn add_connection<'a>(
             let already_left = graph.contains_edge(right, left);
             if let Some(arrow) = Arrow::new(already_left, already_right) {
                 return Err(GraphError::DuplicateEdge(
-                    connection.left,
+                    connection.left.0,
+                    connection.left.1,
                     arrow,
-                    connection.right,
+                    connection.right.1,
+                    connection.right.2,
                 ));
             } else {
                 graph.add_edge(left, right, Edge(logic.clone()));
@@ -127,7 +132,7 @@ pub fn make_graph(
             RoomItem::Node(node) => {
                 add_node(node, &mut nodes, &mut graph).unwrap_or_else(|e| errors.push(e));
             }
-            RoomItem::Connection(connection) => {
+            RoomItem::Edge(connection) => {
                 add_connection(connection, &mut nodes, &mut graph)
                     .unwrap_or_else(|e| errors.push(e));
             }
@@ -166,9 +171,11 @@ impl Display for Edge<'_> {
 impl Display for GraphError<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            GraphError::DuplicateNode(name) => write!(f, "Duplicate node: {}", name),
-            GraphError::MissingNode(name) => write!(f, "Node used before it was defined: {}", name),
-            GraphError::DuplicateEdge(left, arrow, right) => {
+            GraphError::DuplicateNode((_, name, _)) => write!(f, "Duplicate node: {}", name),
+            GraphError::MissingNode((_, name, _)) => {
+                write!(f, "Node used before it was defined: {}", name)
+            }
+            GraphError::DuplicateEdge(_, left, arrow, right, _) => {
                 write!(f, "Duplicate edge: {} {} {}", left, arrow, right)
             }
         }

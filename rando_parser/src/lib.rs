@@ -1,5 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
+mod common;
 pub mod descriptor;
 pub mod logic;
 
