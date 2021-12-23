@@ -1,4 +1,7 @@
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    ops::Range,
+};
 
 use crate::{common::Span, FullIdent, Ident};
 
@@ -13,26 +16,27 @@ pub enum Arrow {
 pub struct Scope<'a> {
     pub keyword: Span<&'a str>,
     pub ident: Span<Ident<'a>>,
-    pub children: Option<ScopeChild<'a>>,
+    pub append: bool,
+    pub children: ScopeChild<'a>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum ScopeChild<'a> {
     Scope(Vec<Scope<'a>>),
-    Room(Vec<RoomItem<'a>>),
+    Graph(Vec<GraphItem<'a>>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub enum RoomItem<'a> {
+pub enum GraphItem<'a> {
     Node(Node<'a>),
     Edge(Edge<'a>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Node<'a> {
-    pub name: Span<Ident<'a>>,
+    pub ident: Span<Ident<'a>>,
     pub children: Vec<Descriptor<'a>>,
-    pub modify: bool,
+    pub append: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -59,6 +63,15 @@ pub enum EdgeLogic<'a> {
 impl EdgeLogic<'_> {
     pub fn is_condition(&self) -> bool {
         matches!(self, EdgeLogic::And(_) | EdgeLogic::Or(_))
+    }
+}
+
+impl Descriptor<'_> {
+    pub fn code_range(&self) -> Range<usize> {
+        let (start, _, kw_end) = self.keyword;
+        let end = self.idents.last().map(|i| i.2).unwrap_or(kw_end);
+
+        start..end
     }
 }
 

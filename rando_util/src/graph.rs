@@ -1,7 +1,7 @@
 use petgraph::graph::DiGraph;
 use petgraph::prelude::*;
-use rando_parser::logic::ast::{self, Arrow, Descriptor, Edge as AstEdge, EdgeLogic, RoomItem};
-use rando_parser::{FullIdent, Ident};
+use rando_parser::logic::ast::{self, Arrow, Descriptor, Edge as AstEdge, EdgeLogic, GraphItem};
+use rando_parser::Ident;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
@@ -21,19 +21,19 @@ fn add_node<'a>(
     nodes: &mut HashMap<Ident<'a>, NodeIndex>,
     graph: &mut DiGraph<Node<'a>, Edge<'a>>,
 ) -> Result<(), GraphError<'a>> {
-    if let Some(&graph_node) = nodes.get(&node.name.1) {
+    if let Some(&graph_node) = nodes.get(&node.ident.1) {
         // Node already created, modify
-        if node.modify {
+        if node.append {
             let mut graph_node = &mut graph[graph_node];
             update_node(&mut graph_node, node);
             Ok(())
         } else {
-            Err(GraphError::DuplicateNode(node.name))
+            Err(GraphError::DuplicateNode(node.ident))
         }
     } else {
         // Create node
-        let index = graph.add_node(Node(node.name.1, node.children));
-        nodes.insert(node.name.1, index);
+        let index = graph.add_node(Node(node.ident.1, node.children));
+        nodes.insert(node.ident.1, index);
         Ok(())
     }
 }
@@ -121,7 +121,7 @@ fn add_connection<'a>(
 }
 
 pub fn make_graph(
-    room: Vec<RoomItem<'_>>,
+    room: Vec<GraphItem<'_>>,
 ) -> Result<DiGraph<Node<'_>, Edge<'_>>, Vec<GraphError<'_>>> {
     let mut graph = DiGraph::new();
     let mut nodes = HashMap::new();
@@ -129,10 +129,10 @@ pub fn make_graph(
 
     for item in room {
         match item {
-            RoomItem::Node(node) => {
+            GraphItem::Node(node) => {
                 add_node(node, &mut nodes, &mut graph).unwrap_or_else(|e| errors.push(e));
             }
-            RoomItem::Edge(connection) => {
+            GraphItem::Edge(connection) => {
                 add_connection(connection, &mut nodes, &mut graph)
                     .unwrap_or_else(|e| errors.push(e));
             }

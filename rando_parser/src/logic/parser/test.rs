@@ -12,7 +12,7 @@ use crate::{
 fn test_logic_parser() {
     let input = include_str!("test.logic");
     let logic = parser::parse_items(input);
-    assert_matches!(logic, Ok(("", i)) => {
+    assert_matches!(logic, Ok(i) => {
         assert_eq!(i.len(), 2);
         assert_eq!(i[0].children.len(), 2);
         assert_eq!(i[0].children[0].children[0].children.len(), 3);
@@ -28,17 +28,17 @@ fn test_logic_sugar() {
         logic,
         Ok(("", l)) => {
             assert_eq!(l.children.len(), 2);
-            assert_matches!(l.header, ItemHeader::Node { keyword: (_, "or", _), .. })
+            assert_matches!(l.header, ItemHeader::Node { keyword: (0, "or", 17), .. })
         }
     );
 
-    let input = "(desc A | desc B | (desc C & desc D))";
+    let input = "(desc A & desc B & (desc C | desc D))";
     let logic = parser::logic_sugar(input, input);
     assert_matches!(
         logic,
         Ok(("", l)) => {
             assert_eq!(l.children.len(), 3);
-            assert_matches!(l.header, ItemHeader::Node { keyword: (_, "or", _), .. })
+            assert_matches!(l.header, ItemHeader::Node { keyword: (0, "and", 37), .. })
         }
     );
 

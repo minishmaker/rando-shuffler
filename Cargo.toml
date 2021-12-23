@@ -12,3 +12,4 @@ petgraph = "0.5.1"
 rando_parser = { path = "rando_parser" }
 rando_util = { path = "rando_util" }
 regex = "1"
+codespan-reporting = "0.11.1"

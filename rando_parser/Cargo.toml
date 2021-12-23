@@ -6,7 +6,5 @@ edition = "2021"
 
 [dependencies]
 nom = "7.1.0"
-lalrpop-util = { version = "0.19.4", features = ["lexer"] }
-regex = "1"
-lazy_static = "1.4.0"
 assert_matches = "1.5.0"
+codespan-reporting = "0.11.1"

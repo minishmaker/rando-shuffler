@@ -3,9 +3,10 @@ use nom::{
     bytes::complete::tag,
     character::complete::{char, line_ending, not_line_ending, one_of, space0},
     combinator::{all_consuming, eof, opt, value},
+    error::Error,
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
-    IResult, Parser,
+    Err, IResult, Parser,
 };
 
 use crate::{
@@ -23,8 +24,8 @@ mod test;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Item<'a> {
-    header: ItemHeader<'a>,
-    children: Vec<Item<'a>>,
+    pub header: ItemHeader<'a>,
+    pub children: Vec<Item<'a>>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -41,11 +42,12 @@ pub enum ItemHeader<'a> {
     },
 }
 
-pub fn parse_items(full: &str) -> IResult<&str, Vec<Item>> {
+pub fn parse_items(full: &str) -> Result<Vec<Item>, Err<Error<&str>>> {
     let indent = Indent::empty();
     all_consuming(many0(preceded(indent, move |input| {
         item(indent, full, input)
     })))(full)
+    .map(|(_, items)| items)
 }
 
 fn item<'a>(indent: Indent<'a>, full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>> {
@@ -100,32 +102,35 @@ fn inline_children<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Vec<It
 fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>> {
     let mut op = sticky(one_of("&|"));
 
-    let r = {
-        delimited(
-            char('('),
-            separated_list1(
-                ls(&mut op),
-                alt((
-                    (|input| node_header(full, input)).map(|h| Item {
-                        header: h,
-                        children: Vec::new(),
-                    }),
-                    |input| logic_sugar(full, input),
-                )),
+    let (input, (start, children, end)) = {
+        span(
+            full,
+            delimited(
+                char('('),
+                separated_list1(
+                    &mut op,
+                    ls(alt((
+                        (|input| node_header(full, input)).map(|h| Item {
+                            header: h,
+                            children: Vec::new(),
+                        }),
+                        |input| logic_sugar(full, input),
+                    ))),
+                ),
+                char(')'),
             ),
-            char(')'),
-        )(input)
+        )(input)?
     };
 
     // If it matches &, it must be &
     let op = op("&").is_ok().then(|| "and").unwrap_or("or");
     let header = ItemHeader::Node {
         append: false,
-        keyword: (0, op, 0),
+        keyword: (start, op, end),
         idents: Vec::new(),
     };
 
-    r.map(|(i, children)| (i, Item { header, children }))
+    Ok((input, Item { header, children }))
 }
 
 fn header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader<'a>> {

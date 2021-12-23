@@ -12,6 +12,10 @@ use nom::{
 
 pub type Span<T> = (usize, T, usize);
 
+pub fn limits<T>(spans: &[Span<T>]) -> Option<Span<()>> {
+    (spans.len() > 0).then(|| (spans[0].0, (), spans[spans.len() - 1].2))
+}
+
 fn substr_index<'a, 'b>(full: &'a str, sub: &'b str) -> Option<usize> {
     assert!(full.len() <= (isize::MAX as usize));
     let full = full.as_bytes().as_ptr_range();
@@ -27,8 +31,8 @@ fn substr_index<'a, 'b>(full: &'a str, sub: &'b str) -> Option<usize> {
     }
 }
 
-pub fn span<'a, 'b: 'a, F: 'a, O, E>(
-    full: &'b str,
+pub fn span<'a: 'b, 'b, F: 'b, O, E>(
+    full: &'a str,
     mut parser: F,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Span<O>, E>
 where
