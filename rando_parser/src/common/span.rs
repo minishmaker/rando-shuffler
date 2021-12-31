@@ -2,7 +2,6 @@ use std::ops::Range;
 
 use nom::IResult;
 
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Span<T>(pub usize, pub T, pub usize);
 
@@ -21,7 +20,7 @@ impl<T> Span<T> {
 
     pub fn map<U, F>(self, f: F) -> Span<U>
     where
-        F: FnOnce(T) -> U
+        F: FnOnce(T) -> U,
     {
         Span(self.0, f(self.1), self.2)
     }

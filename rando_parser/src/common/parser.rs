@@ -1,4 +1,13 @@
-use nom::{IResult, Parser, combinator::{recognize, map_res, consumed}, multi::{many0, separated_list1}, branch::alt, character::complete::{char, alphanumeric1, multispace0, space0}, bytes::complete::{tag, is_not}, error::{ParseError, FromExternalError, ErrorKind}, sequence::{pair, preceded, delimited}, InputTakeAtPosition};
+use nom::{
+    branch::alt,
+    bytes::complete::{is_not, tag},
+    character::complete::{alphanumeric1, char, multispace0, space0},
+    combinator::{consumed, map_res, recognize},
+    error::{ErrorKind, FromExternalError, ParseError},
+    multi::{many0, separated_list1},
+    sequence::{delimited, pair, preceded},
+    IResult, InputTakeAtPosition, Parser,
+};
 
 use crate::{FullIdent, Ident};
 
@@ -6,7 +15,7 @@ use super::error::CommonError;
 
 pub fn relation_name<'a, E>(input: &'a str) -> IResult<&str, &str, E>
 where
-    E: ParseError<&'a str>
+    E: ParseError<&'a str>,
 {
     recognize(many0(alt((alphanumeric1, tag("_")))))(input)
 }

@@ -9,7 +9,10 @@ use nom::{
 };
 
 use crate::{
-    common::{parser::{full_ident, ident_part, keyword, ls, relation_name}, span::{span, Span}},
+    common::{
+        parser::{full_ident, ident_part, keyword, ls, relation_name},
+        span::{span, Span},
+    },
     Ident,
 };
 

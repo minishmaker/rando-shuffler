@@ -6,7 +6,11 @@ use nom::{
     },
 };
 
-use crate::common::{parser::ls, span::{self, Span, span}, error::CommonError};
+use crate::common::{
+    error::CommonError,
+    parser::ls,
+    span::{self, span, Span},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ParseError<'a> {
@@ -59,7 +63,13 @@ impl<'a> ParseError<'a> {
         }
     }
 
-    fn diagnostic_label<F>(&self, full: &'a str, remaining: &'a str, actual: Span<&'a str>, file: F) -> Label<F> {
+    fn diagnostic_label<F>(
+        &self,
+        full: &'a str,
+        remaining: &'a str,
+        actual: Span<&'a str>,
+        file: F,
+    ) -> Label<F> {
         let range = match self.kind {
             Ok(ParseErrorKind::WrongIndent { actual, .. }) => {
                 let start = span::substr_index(full, actual).unwrap();
@@ -78,10 +88,11 @@ impl<'a> ParseError<'a> {
 
     fn diagnostic_notes(&self) -> Vec<String> {
         match self.kind {
-            Ok(ParseErrorKind::OpMix { .. }) =>
-                vec!["'&' and '|' can't be mixed without parentheses".into()],
+            Ok(ParseErrorKind::OpMix { .. }) => {
+                vec!["'&' and '|' can't be mixed without parentheses".into()]
+            }
             Ok(ParseErrorKind::Common(c)) => c.diagnostic_notes(),
-            _ => Vec::new()
+            _ => Vec::new(),
         }
     }
 }

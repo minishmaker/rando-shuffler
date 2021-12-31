@@ -10,7 +10,10 @@ use nom::{
     Finish, IResult, Parser,
 };
 
-use crate::common::{parser::{full_ident, ident_part, keyword, ls, require, sticky}, span::{span, Span}};
+use crate::common::{
+    parser::{full_ident, ident_part, keyword, ls, require, sticky},
+    span::{span, Span},
+};
 
 use super::{
     ast::{Arrow, Item, ItemHeader},
@@ -69,11 +72,10 @@ fn block_children<'a>(
     full: &'a str,
     input: &'a str,
 ) -> IResult<&'a str, Vec<Item<'a>>, ParseError<'a>> {
-    let (input, indent) = get_indent(indent, input)
-        .map_err(|i| {
-            println!("{:?}", i);
-            i
-        })?;
+    let (input, indent) = get_indent(indent, input).map_err(|i| {
+        println!("{:?}", i);
+        i
+    })?;
 
     let error_check = require(map_res(opt(space1), |s| {
         if let Some(actual) = s {

@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{space1, space0},
+    character::complete::{space0, space1},
     combinator::{map_res, peek, recognize},
     multi::many0,
     sequence::{pair, preceded},
@@ -43,8 +43,8 @@ impl<'a> Parser<&'a str, &'a str, ParseError<'a>> for Indent<'a> {
                         base: self.space,
                         actual,
                     })
-                })
-            ))
+                }),
+            )),
         )(input)
     }
 }

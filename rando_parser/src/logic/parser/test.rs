@@ -1,11 +1,12 @@
 use assert_matches::assert_matches;
 
 use crate::{
+    common::span::Span,
     logic::{
         ast::Arrow,
         parser::{self, ItemHeader},
     },
-    Ident, common::span::Span,
+    Ident,
 };
 
 #[test]

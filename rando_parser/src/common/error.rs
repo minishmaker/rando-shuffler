@@ -1,6 +1,9 @@
 use std::ops::Range;
 
-use nom::{combinator::recognize, multi::many0, branch::alt, character::complete::alphanumeric1, bytes::complete::tag};
+use nom::{
+    branch::alt, bytes::complete::tag, character::complete::alphanumeric1, combinator::recognize,
+    multi::many0,
+};
 
 use super::span::{span, Span};
 
@@ -20,11 +23,13 @@ impl CommonError {
 
     pub fn diagnostic_notes(&self) -> Vec<String> {
         match self {
-            CommonError::ExpectedKeyword => vec!["Keywords must begin with a lowercase letter".into()],
+            CommonError::ExpectedKeyword => {
+                vec!["Keywords must begin with a lowercase letter".into()]
+            }
             CommonError::ExpectedIdent => vec![
                 "Identifiers cannot start with lowercase letters unless enclosed in quotes (\")"
-                    .into()
-            ]
+                    .into(),
+            ],
         }
     }
 
