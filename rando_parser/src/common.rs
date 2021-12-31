@@ -1,10 +1,12 @@
+use std::ops::Range;
+
 use crate::{FullIdent, Ident};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
     character::complete::{alphanumeric1, char, multispace0, space0},
-    combinator::{consumed, recognize},
-    error::{ErrorKind, ParseError},
+    combinator::{consumed, map_res, recognize},
+    error::{ErrorKind, FromExternalError, ParseError},
     multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded},
     IResult, InputTakeAtPosition, Parser,
@@ -16,7 +18,7 @@ pub fn limits<T>(spans: &[Span<T>]) -> Option<Span<()>> {
     (spans.len() > 0).then(|| (spans[0].0, (), spans[spans.len() - 1].2))
 }
 
-fn substr_index<'a, 'b>(full: &'a str, sub: &'b str) -> Option<usize> {
+pub fn substr_index<'a, 'b>(full: &'a str, sub: &'b str) -> Option<usize> {
     assert!(full.len() <= (isize::MAX as usize));
     let full = full.as_bytes().as_ptr_range();
     let sub = sub.as_bytes().as_ptr_range();
@@ -46,18 +48,78 @@ where
     }
 }
 
-pub fn keyword(input: &str) -> IResult<&str, &str> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CommonError {
+    ExpectedKeyword,
+    ExpectedIdent,
+}
+
+impl CommonError {
+    pub fn diagnostic_message(&self) -> String {
+        match self {
+            CommonError::ExpectedKeyword => "Expected keyword, found identifier".into(),
+            CommonError::ExpectedIdent => "Expected identifier, found keyword".into(),
+        }
+    }
+
+    pub fn diagnostic_notes(&self) -> Vec<String> {
+        match self {
+            CommonError::ExpectedKeyword => vec!["Keywords must begin with a lowercase letter".into()],
+            CommonError::ExpectedIdent => vec![
+                "Identifiers cannot start with lowercase letters unless enclosed in quotes (\")"
+                    .into()
+            ]
+        }
+    }
+
+    pub fn range(&self, remaining: &str, full: &str) -> Range<usize> {
+        span::<_, _, ()>(full, recognize(many0(alt((alphanumeric1, tag("_"))))))(remaining)
+            .map(|(_, (s, _, e))| s..e)
+            .unwrap()
+    }
+}
+
+pub fn relation_name(input: &str) -> IResult<&str, &str> {
+    recognize(many0(alt((alphanumeric1, tag("_")))))(input)
+}
+
+pub fn keyword<'a, E>(input: &'a str) -> IResult<&str, &str, E>
+where
+    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError>,
+{
+    alt((
+        keyword_unchecked,
+        map_res(ident_part_unchecked, |_| Err(CommonError::ExpectedKeyword)),
+    ))(input)
+}
+
+fn keyword_unchecked<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, &str, E> {
     recognize(pair(asciilower1, many0(alt((alphanumeric1, tag("_"))))))(input)
 }
 
-pub fn full_ident(input: &str) -> IResult<&str, FullIdent<'_>> {
+pub fn full_ident<'a, E>(input: &'a str) -> IResult<&str, FullIdent<'_>, E>
+where
+    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError>,
+{
     alt((
         separated_list1(char('.'), ident_part).map(|idents| FullIdent::Namespaced { idents }),
         preceded(char('g'), ident_part).map(|ident| FullIdent::Global { ident }),
     ))(input)
 }
 
-pub fn ident_part(input: &str) -> IResult<&str, Ident<'_>> {
+pub fn ident_part<'a, E>(input: &'a str) -> IResult<&str, Ident<'_>, E>
+where
+    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError>,
+{
+    alt((
+        ident_part_unchecked,
+        map_res(keyword_unchecked, |_| Err(CommonError::ExpectedIdent)),
+    ))(input)
+}
+
+pub fn ident_part_unchecked<'a, E: ParseError<&'a str>>(
+    input: &'a str,
+) -> IResult<&str, Ident<'_>, E> {
     alt((
         char('_').map(|_| Ident::Anon),
         normal_ident.map(Ident::Normal),
@@ -65,18 +127,18 @@ pub fn ident_part(input: &str) -> IResult<&str, Ident<'_>> {
     ))(input)
 }
 
-fn normal_ident(input: &str) -> IResult<&str, &str> {
+fn normal_ident<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, &str, E> {
     recognize(pair(asciiupper1, many0(alt((alphanumeric1, tag("_"))))))(input)
 }
 
-pub fn asciilower1(input: &str) -> IResult<&str, &str> {
+pub fn asciilower1<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, &str, E> {
     input.split_at_position1_complete(|item| !item.is_ascii_lowercase(), ErrorKind::AlphaNumeric)
 }
-pub fn asciiupper1(input: &str) -> IResult<&str, &str> {
+pub fn asciiupper1<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, &str, E> {
     input.split_at_position1_complete(|item| !item.is_ascii_uppercase(), ErrorKind::AlphaNumeric)
 }
 
-pub fn escaped_ident(input: &str) -> IResult<&str, &str> {
+pub fn escaped_ident<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, &str, E> {
     delimited(char('"'), is_not("\"\r\n"), char('"'))(input)
 }
 
@@ -126,5 +188,20 @@ where
                 Ok((input, parsed))
             }
         }
+    }
+}
+
+/// Upgrades errors to failures. For some reason, this isn't in base nom.
+pub fn require<'a: 'b, 'b, F: 'b, O: Clone, E: ParseError<&'a str>>(
+    mut inner: F,
+) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
+where
+    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
+{
+    move |input| {
+        inner(input).map_err(|e| match e {
+            nom::Err::Error(e) => nom::Err::Failure(e),
+            e => e,
+        })
     }
 }

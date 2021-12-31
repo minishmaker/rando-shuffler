@@ -1,60 +1,49 @@
+use std::convert::identity;
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{char, line_ending, not_line_ending, one_of, space0},
-    combinator::{all_consuming, eof, opt, value},
-    error::Error,
+    character::complete::{char, line_ending, not_line_ending, one_of, space0, space1},
+    combinator::{all_consuming, eof, map_res, opt, success, value},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
-    Err, IResult, Parser,
+    Finish, IResult, Parser,
 };
 
-use crate::{
-    common::{full_ident, ident_part, keyword, ls, span, sticky, Span},
-    FullIdent, Ident,
-};
+use crate::common::{full_ident, ident_part, keyword, ls, require, span, sticky};
 
 use super::{
-    ast::Arrow,
+    ast::{Arrow, Item, ItemHeader},
     indent::{get_indent, Indent},
 };
+
+pub mod error;
+use error::{ParseError, ParseErrorKind};
 
 #[cfg(test)]
 mod test;
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct Item<'a> {
-    pub header: ItemHeader<'a>,
-    pub children: Vec<Item<'a>>,
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub enum ItemHeader<'a> {
-    Node {
-        append: bool,
-        keyword: Span<&'a str>,
-        idents: Vec<Span<FullIdent<'a>>>,
-    },
-    Edge {
-        left: Span<Ident<'a>>,
-        arrow: Span<Arrow>,
-        right: Span<Ident<'a>>,
-    },
-}
-
-pub fn parse_items(full: &str) -> Result<Vec<Item>, Err<Error<&str>>> {
+pub fn parse_items(full: &str) -> Result<Vec<Item>, ParseError> {
     let indent = Indent::empty();
     all_consuming(many0(preceded(indent, move |input| {
         item(indent, full, input)
     })))(full)
+    .finish()
     .map(|(_, items)| items)
 }
 
-fn item<'a>(indent: Indent<'a>, full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>> {
+fn item<'a>(
+    indent: Indent<'a>,
+    full: &'a str,
+    input: &'a str,
+) -> IResult<&'a str, Item<'a>, ParseError<'a>> {
     pair(
         |input| header(full, input),
         alt((
-            preceded(ls(char(':')), |input| children(indent, full, input)),
+            preceded(
+                ls(char(':')),
+                require(|input| children(indent, full, input)),
+            ),
             comment_line_end.map(|_| Vec::new()),
         )),
     )
@@ -66,7 +55,7 @@ fn children<'a>(
     indent: Indent<'a>,
     full: &'a str,
     input: &'a str,
-) -> IResult<&'a str, Vec<Item<'a>>> {
+) -> IResult<&'a str, Vec<Item<'a>>, ParseError<'a>> {
     alt((
         |input| inline_children(full, input),
         |input| block_children(indent, full, input),
@@ -77,13 +66,33 @@ fn block_children<'a>(
     indent: Indent<'a>,
     full: &'a str,
     input: &'a str,
-) -> IResult<&'a str, Vec<Item<'a>>> {
-    let (input, indent) = get_indent(indent, input)?;
+) -> IResult<&'a str, Vec<Item<'a>>, ParseError<'a>> {
+    let (input, indent) = get_indent(indent, input)
+        .map_err(|i| {
+            println!("{:?}", i);
+            i
+        })?;
 
-    many1(preceded(indent, move |input| item(indent, full, input)))(input)
+    let error_check = require(map_res(opt(space1), |s| {
+        if let Some(actual) = s {
+            Err(ParseErrorKind::WrongIndent {
+                base: indent.space,
+                actual,
+            })
+        } else {
+            Ok(())
+        }
+    }));
+
+    many1(preceded(pair(indent, error_check), move |input| {
+        item(indent, full, input)
+    }))(input)
 }
 
-fn inline_children<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Vec<Item<'a>>> {
+fn inline_children<'a>(
+    full: &'a str,
+    input: &'a str,
+) -> IResult<&'a str, Vec<Item<'a>>, ParseError<'a>> {
     terminated(
         alt((
             separated_list1(
@@ -99,15 +108,20 @@ fn inline_children<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Vec<It
     )(input)
 }
 
-fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>> {
+fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>, ParseError<'a>> {
     let mut op = sticky(one_of("&|"));
+    let mut backup = require(map_res(one_of("&|"), |o| {
+        Err(ParseErrorKind::OpMix {
+            expected: if o == '&' { '|' } else { '&' },
+        })
+    }));
 
     let (input, (start, children, end)) = {
         span(
             full,
             delimited(
                 char('('),
-                separated_list1(
+                require(separated_list1(
                     &mut op,
                     ls(alt((
                         (|input| node_header(full, input)).map(|h| Item {
@@ -116,8 +130,8 @@ fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>> 
                         }),
                         |input| logic_sugar(full, input),
                     ))),
-                ),
-                char(')'),
+                )),
+                alt((char(')'), &mut backup)),
             ),
         )(input)?
     };
@@ -133,14 +147,17 @@ fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>> 
     Ok((input, Item { header, children }))
 }
 
-fn header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader<'a>> {
+fn header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader<'a>, ParseError<'a>> {
     alt((
         |input| node_header(full, input),
         |input| edge_header(full, input),
     ))(input)
 }
 
-fn node_header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader<'a>> {
+fn node_header<'a>(
+    full: &'a str,
+    input: &'a str,
+) -> IResult<&'a str, ItemHeader<'a>, ParseError<'a>> {
     tuple((
         span(full, keyword),
         many0(ls(span(full, full_ident))),
@@ -154,11 +171,14 @@ fn node_header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader
     .parse(input)
 }
 
-fn edge_header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader<'a>> {
+fn edge_header<'a>(
+    full: &'a str,
+    input: &'a str,
+) -> IResult<&'a str, ItemHeader<'a>, ParseError<'a>> {
     tuple((
         span(full, ident_part),
-        ls(span(full, arrow)),
-        span(full, ident_part),
+        require(ls(span(full, arrow))),
+        require(span(full, ident_part)),
     ))
     .map(|(l, a, r)| ItemHeader::Edge {
         left: l,
@@ -168,14 +188,15 @@ fn edge_header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader
     .parse(input)
 }
 
-fn arrow(input: &str) -> IResult<&str, Arrow> {
+fn arrow(input: &str) -> IResult<&str, Arrow, ParseError> {
     alt((
         preceded(tag("<-"), opt(char('>'))).map(|r| Arrow::new(true, r.is_some()).unwrap()),
         value(Arrow::Right, tag("->")),
+        map_res(success(Err(ParseErrorKind::Arrow)), identity),
     ))(input)
 }
 
-pub fn comment_line_end(input: &str) -> IResult<&str, Option<&str>> {
+pub fn comment_line_end(input: &str) -> IResult<&str, Option<&str>, ParseError> {
     delimited(
         space0,
         opt(preceded(char('#'), not_line_ending)),

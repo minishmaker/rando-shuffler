@@ -2,9 +2,8 @@ use crate::{common::Span, FullIdent, Ident};
 
 use self::error::{accumulate_errors, merge_results, ItemType};
 
-use super::{
-    ast::{Descriptor, Edge, EdgeLogic, GraphItem, Node, Scope, ScopeChild},
-    parser::{Item, ItemHeader},
+use super::ast::{
+    Descriptor, Edge, EdgeLogic, GraphItem, Item, ItemHeader, Node, Scope, ScopeChild,
 };
 
 mod error;

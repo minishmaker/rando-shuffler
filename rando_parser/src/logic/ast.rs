@@ -5,6 +5,26 @@ use std::{
 
 use crate::{common::Span, FullIdent, Ident};
 
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub struct Item<'a> {
+    pub header: ItemHeader<'a>,
+    pub children: Vec<Item<'a>>,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub enum ItemHeader<'a> {
+    Node {
+        append: bool,
+        keyword: Span<&'a str>,
+        idents: Vec<Span<FullIdent<'a>>>,
+    },
+    Edge {
+        left: Span<Ident<'a>>,
+        arrow: Span<Arrow>,
+        right: Span<Ident<'a>>,
+    },
+}
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Arrow {
     Right,

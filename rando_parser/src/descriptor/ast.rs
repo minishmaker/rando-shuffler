@@ -1,4 +1,4 @@
-use crate::FullIdent;
+use crate::{common::Span, FullIdent, Ident};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct RuleDef<'a> {
@@ -9,38 +9,61 @@ pub struct RuleDef<'a> {
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum Value<'a> {
-    Var(&'a str),
+    Var(Ident<'a>),
     Const(FullIdent<'a>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct Relation {}
+pub struct Reference<'a> {
+    pub keyword: Span<&'a str>,
+    pub values: Vec<Span<Value<'a>>>,
+    pub end: usize,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub struct Relation<'a> {
+    pub left_to_right: bool,
+    pub name: Span<&'a str>,
+}
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RuleBody<'a> {
     County(RuleBodyCounty<'a>),
     Truthy(RuleBodyTruthy<'a>),
-    Reference(&'a str, Vec<Value<'a>>),
+    Reference(Reference<'a>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RuleBodyCounty<'a> {
     Constant(u32),
-    Reference(&'a str, Vec<Value<'a>>),
+    Reference(Reference<'a>),
     LinearComb(Vec<(RuleBodyCounty<'a>, u32)>),
-    Count(&'a str, &'a str, Value<'a>, Box<RuleBodyTruthy<'a>>),
+    Min(Vec<RuleBodyCounty<'a>>),
+    Max(Vec<RuleBodyCounty<'a>>),
+    Count(
+        Span<Ident<'a>>,
+        Relation<'a>,
+        Span<Value<'a>>,
+        Box<RuleBodyTruthy<'a>>,
+    ),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RuleBodyTruthy<'a> {
     Constant(Oolean),
-    Reference(&'a str, Vec<Value<'a>>),
-    Access(&'a str, Vec<Value<'a>>),
+    Reference(Reference<'a>),
+    Access(Reference<'a>),
     Compare(Box<RuleBodyCounty<'a>>, u32),
-    Exists(&'a str, &'a str, Value<'a>, Box<RuleBodyTruthy<'a>>),
-    All(Vec<RuleBodyTruthy<'a>>),
-    CheckPosterior(Vec<StateBody<'a>>),
-    CheckPrior(Vec<StateBody<'a>>),
+    Exists(
+        Span<Ident<'a>>,
+        Relation<'a>,
+        Span<Value<'a>>,
+        Box<RuleBodyTruthy<'a>>,
+    ),
+    And(Vec<RuleBodyTruthy<'a>>),
+    Or(Vec<RuleBodyTruthy<'a>>),
+    CheckPosterior(Vec<Span<StateBody<'a>>>),
+    CheckPrior(Vec<Span<StateBody<'a>>>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]

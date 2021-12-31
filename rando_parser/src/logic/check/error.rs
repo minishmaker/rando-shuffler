@@ -8,10 +8,7 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use crate::{
     common::{self, Span},
-    logic::{
-        ast::Descriptor,
-        parser::{Item, ItemHeader},
-    },
+    logic::ast::{Descriptor, Item, ItemHeader},
     FullIdent,
 };
 
@@ -151,8 +148,8 @@ impl Display for ItemType<'_> {
 }
 
 impl TreeError<'_, '_> {
-    fn get_single_diagnostic<F>(&self, file: F) -> Diagnostic<F> {
-        let message = self.get_diagnostic_message();
+    fn single_diagnostic<F>(&self, file: F) -> Diagnostic<F> {
+        let message = self.diagnostic_message();
         let label = Label::primary(file, self.get_range());
 
         Diagnostic::error()
@@ -160,7 +157,7 @@ impl TreeError<'_, '_> {
             .with_labels(vec![label])
     }
 
-    pub fn get_diagnostics<'a, F: Clone + 'a>(
+    pub fn diagnostics<'a, F: Clone + 'a>(
         &'a self,
         file: F,
     ) -> impl Iterator<Item = Diagnostic<F>> + 'a {
@@ -172,10 +169,10 @@ impl TreeError<'_, '_> {
 
         errors
             .into_iter()
-            .map(move |e| e.get_single_diagnostic(file.clone()))
+            .map(move |e| e.single_diagnostic(file.clone()))
     }
 
-    fn get_diagnostic_message(&self) -> String {
+    fn diagnostic_message(&self) -> String {
         match self {
             TreeError::WrongItem {
                 expected, actual, ..

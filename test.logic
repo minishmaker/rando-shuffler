@@ -675,6 +675,6 @@ area TempleOfDroplets:
       chest SunkenRupee6
 
     LilyPadAccess <-> LilyPadAcessEast: open TempleOfDroplets.GFWestEntry.UpperPathWestDoor
-    UpperWater <-> Stairs: (item Flippers | (item Lilypad & item GustJar))
+    UpperWater <-> Stairs: (item Flippers | (item Lilypad & item GustJar | r))
     Stairs <-> LowerWater: (item Flippers | (item Lilypad & item GustJar))
     LowerWater -> LowerWaterRuppees: item Flippers

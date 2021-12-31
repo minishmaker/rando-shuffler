@@ -2,12 +2,11 @@ use codespan_reporting::files::{self, SimpleFile};
 use codespan_reporting::term::{self, Config};
 use petgraph::dot::Dot;
 use rando_parser::logic::ast::ScopeChild;
-use rando_parser::logic::TreeError;
+use rando_parser::logic::LogicError;
 use rando_util::graph;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{self, Read};
-use std::process::Output;
 
 fn main() -> io::Result<()> {
     let mut input = String::new();
@@ -56,11 +55,11 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn output_errors(error: TreeError<'_, '_>, source: &str) -> Result<(), files::Error> {
+fn output_errors(error: LogicError<'_, '_>, source: &str) -> Result<(), files::Error> {
     use term::termcolor::{ColorChoice, StandardStream};
     let file = SimpleFile::new("stdin", source);
     let mut stdout = StandardStream::stdout(ColorChoice::Auto);
-    for diagnostic in error.get_diagnostics(()) {
+    for diagnostic in error.diagnostics((), source) {
         term::emit(&mut stdout, &Config::default(), &file, &diagnostic)?;
     }
 
