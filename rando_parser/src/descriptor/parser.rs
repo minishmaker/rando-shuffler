@@ -9,7 +9,7 @@ use nom::{
 };
 
 use crate::{
-    common::{full_ident, ident_part, keyword, ls, relation_name, span},
+    common::{parser::{full_ident, ident_part, keyword, ls, relation_name}, span::{span, Span}},
     Ident,
 };
 
@@ -205,7 +205,7 @@ fn reference<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Reference<'a
             ),
         ),
     )
-    .map(|(keyword, (values, (.., end)))| Reference {
+    .map(|(keyword, (values, Span(.., end)))| Reference {
         keyword,
         values,
         end,

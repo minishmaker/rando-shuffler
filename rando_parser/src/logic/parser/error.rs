@@ -6,7 +6,7 @@ use nom::{
     },
 };
 
-use crate::common::{self, ls, span, CommonError, Span};
+use crate::common::{parser::ls, span::{self, Span, span}, error::CommonError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ParseError<'a> {
@@ -27,7 +27,7 @@ impl<'a> ParseError<'a> {
     pub fn diagnostic<F>(&self, full: &'a str, file: F) -> Diagnostic<F> {
         let actual =
             ls::<_, _, ()>(span(full, take_while(|c: char| !c.is_whitespace())))(self.input)
-                .map(|(_, (s, i, e))| (s, i, e))
+                .map(|(_, n)| n)
                 .unwrap();
 
         let message = self.diagnostic_message();
@@ -62,7 +62,7 @@ impl<'a> ParseError<'a> {
     fn diagnostic_label<F>(&self, full: &'a str, remaining: &'a str, actual: Span<&'a str>, file: F) -> Label<F> {
         let range = match self.kind {
             Ok(ParseErrorKind::WrongIndent { actual, .. }) => {
-                let start = common::substr_index(full, actual).unwrap();
+                let start = span::substr_index(full, actual).unwrap();
                 start..start + actual.len()
             }
             Ok(ParseErrorKind::Char(_)) => {

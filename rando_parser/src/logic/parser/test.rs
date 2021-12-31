@@ -5,7 +5,7 @@ use crate::{
         ast::Arrow,
         parser::{self, ItemHeader},
     },
-    Ident,
+    Ident, common::span::Span,
 };
 
 #[test]
@@ -28,7 +28,7 @@ fn test_logic_sugar() {
         logic,
         Ok(("", l)) => {
             assert_eq!(l.children.len(), 2);
-            assert_matches!(l.header, ItemHeader::Node { keyword: (0, "or", 17), .. })
+            assert_matches!(l.header, ItemHeader::Node { keyword: Span(0, "or", 17), .. })
         }
     );
 
@@ -38,7 +38,7 @@ fn test_logic_sugar() {
         logic,
         Ok(("", l)) => {
             assert_eq!(l.children.len(), 3);
-            assert_matches!(l.header, ItemHeader::Node { keyword: (0, "and", 37), .. })
+            assert_matches!(l.header, ItemHeader::Node { keyword: Span(0, "and", 37), .. })
         }
     );
 
@@ -57,7 +57,7 @@ fn test_node_header() {
             "",
             ItemHeader::Node {
                 append: true,
-                keyword: (0, "node", 4),
+                keyword: Span(0, "node", 4),
                 ..
             }
         ))
@@ -71,7 +71,7 @@ fn test_node_header() {
             "",
             ItemHeader::Node {
                 append: false,
-                keyword: (0, "and", 3),
+                keyword: Span(0, "and", 3),
                 idents: Vec::new()
             }
         ))
@@ -85,7 +85,7 @@ fn test_node_header() {
             "",
             ItemHeader::Node {
                 append: false,
-                keyword: (0, "foo", 3),
+                keyword: Span(0, "foo", 3),
                 ..
             }
         ))
@@ -101,9 +101,9 @@ fn test_edge_header() {
         Ok((
             "",
             ItemHeader::Edge {
-                left: (0, Ident::Normal("A"), 1),
-                arrow: (9, Arrow::Right, 11),
-                right: (12, Ident::Normal("B"), 13)
+                left: Span(0, Ident::Normal("A"), 1),
+                arrow: Span(9, Arrow::Right, 11),
+                right: Span(12, Ident::Normal("B"), 13)
             }
         ))
     );

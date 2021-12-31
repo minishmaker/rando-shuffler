@@ -7,7 +7,7 @@ use std::{
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 
 use crate::{
-    common::{self, Span},
+    common::span::Span,
     logic::ast::{Descriptor, Item, ItemHeader},
     FullIdent,
 };
@@ -103,7 +103,7 @@ impl<'a> ItemType<'a> {
     fn get_type(item: &ItemHeader<'a>, descriptor: bool) -> ItemType<'a> {
         match item {
             ItemHeader::Node {
-                keyword: (_, keyword, _),
+                keyword: Span(_, keyword, _),
                 ..
             } => match *keyword {
                 "node" => ItemType::GraphItem,
@@ -200,11 +200,11 @@ impl TreeError<'_, '_> {
             TreeError::Append { descriptor } => descriptor.code_range(),
             TreeError::Children { descriptor, .. } => descriptor.code_range(),
             TreeError::FullIdent {
-                ident: (start, _, end),
+                ident: Span(start, _, end),
                 ..
             } => *start..*end,
             TreeError::MultipleIdents { idents, .. } => {
-                let (start, _, end) = common::limits(&idents[1..]).unwrap();
+                let Span(start, _, end) = Span::limits(&idents[1..]).unwrap();
                 start..end
             }
             TreeError::Multiple(_) => unimplemented!(),
@@ -215,7 +215,7 @@ impl TreeError<'_, '_> {
 fn header_range(header: &ItemHeader<'_>) -> Range<usize> {
     match header {
         ItemHeader::Node {
-            keyword: (start, _, kw_end),
+            keyword: Span(start, _, kw_end),
             idents,
             ..
         } => {
@@ -223,8 +223,8 @@ fn header_range(header: &ItemHeader<'_>) -> Range<usize> {
             *start..end
         }
         ItemHeader::Edge {
-            left: (start, ..),
-            right: (.., end),
+            left: Span(start, ..),
+            right: Span(.., end),
             ..
         } => *start..*end,
     }

@@ -1,4 +1,4 @@
-use crate::{common::Span, FullIdent, Ident};
+use crate::{common::span::Span, FullIdent, Ident};
 
 use self::error::{accumulate_errors, merge_results, ItemType};
 
@@ -18,17 +18,17 @@ fn flatten_idents<'a>(
     mut idents: Vec<Span<FullIdent<'a>>>,
 ) -> Result<Span<Ident<'a>>, TreeError<'a, 'static>> {
     if idents.len() == 1 {
-        let (start, ident, end) = idents.swap_remove(0);
+        let Span(start, ident, end) = idents.swap_remove(0);
         match &ident {
             FullIdent::Global { .. } => Err(TreeError::FullIdent {
                 keyword,
-                ident: (start, ident, end),
+                ident: Span(start, ident, end),
             }),
             FullIdent::Namespaced { idents } => match idents.len() {
-                1 => Ok((start, idents[0], end)),
+                1 => Ok(Span(start, idents[0], end)),
                 _ => Err(TreeError::FullIdent {
                     keyword,
-                    ident: (start, ident, end),
+                    ident: Span(start, ident, end),
                 }),
             },
         }
@@ -123,7 +123,7 @@ fn convert_edge_logic<'a>(item: Item<'a>) -> Result<EdgeLogic<'a>, TreeError<'a,
     let item = ItemType::type_check(item, ItemType::Logic)?;
     match &item.header {
         ItemHeader::Node {
-            keyword: (_, op @ ("and" | "or"), _),
+            keyword: Span(_, op @ ("and" | "or"), _),
             ..
         } => item
             .children

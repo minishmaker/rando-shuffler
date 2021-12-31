@@ -4,6 +4,8 @@ mod common;
 pub mod descriptor;
 pub mod logic;
 
+pub use common::span::Span;
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Ident<'a> {
     Anon,

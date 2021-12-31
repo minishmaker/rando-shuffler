@@ -10,7 +10,7 @@ use nom::{
     Finish, IResult, Parser,
 };
 
-use crate::common::{full_ident, ident_part, keyword, ls, require, span, sticky};
+use crate::common::{parser::{full_ident, ident_part, keyword, ls, require, sticky}, span::{span, Span}};
 
 use super::{
     ast::{Arrow, Item, ItemHeader},
@@ -22,6 +22,8 @@ use error::{ParseError, ParseErrorKind};
 
 #[cfg(test)]
 mod test;
+
+//type ParseResult<'a, T> = IResult<&'a str, Result<T, ParseError<'a>>, ParseError<'a>>;
 
 pub fn parse_items(full: &str) -> Result<Vec<Item>, ParseError> {
     let indent = Indent::empty();
@@ -116,7 +118,7 @@ fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>, 
         })
     }));
 
-    let (input, (start, children, end)) = {
+    let (input, Span(start, children, end)) = {
         span(
             full,
             delimited(
@@ -140,7 +142,7 @@ fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>, 
     let op = op("&").is_ok().then(|| "and").unwrap_or("or");
     let header = ItemHeader::Node {
         append: false,
-        keyword: (start, op, end),
+        keyword: Span(start, op, end),
         idents: Vec::new(),
     };
 

@@ -1,4 +1,4 @@
-use crate::{common::Span, FullIdent, Ident};
+use crate::{common::span::Span, FullIdent, Ident};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct RuleDef<'a> {

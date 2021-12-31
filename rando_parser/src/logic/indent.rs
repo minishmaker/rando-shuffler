@@ -8,7 +8,7 @@ use nom::{
     IResult, Parser,
 };
 
-use crate::common::require;
+use crate::common::parser::require;
 
 use super::parser::{
     comment_line_end,

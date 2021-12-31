@@ -3,7 +3,7 @@ use std::{
     ops::Range,
 };
 
-use crate::{common::Span, FullIdent, Ident};
+use crate::{common::span::Span, FullIdent, Ident};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Item<'a> {
@@ -88,7 +88,7 @@ impl EdgeLogic<'_> {
 
 impl Descriptor<'_> {
     pub fn code_range(&self) -> Range<usize> {
-        let (start, _, kw_end) = self.keyword;
+        let Span(start, _, kw_end) = self.keyword;
         let end = self.idents.last().map(|i| i.2).unwrap_or(kw_end);
 
         start..end
@@ -98,7 +98,7 @@ impl Descriptor<'_> {
 impl Display for Descriptor<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.keyword.1)?;
-        for (_, ident, _) in &self.idents {
+        for Span(_, ident, _) in &self.idents {
             write!(f, " {}", ident)?;
         }
 

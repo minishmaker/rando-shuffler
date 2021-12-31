@@ -1,7 +1,7 @@
 use petgraph::graph::DiGraph;
 use petgraph::prelude::*;
 use rando_parser::logic::ast::{self, Arrow, Descriptor, Edge as AstEdge, EdgeLogic, GraphItem};
-use rando_parser::Ident;
+use rando_parser::{Ident, Span};
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
@@ -11,9 +11,9 @@ pub struct Node<'a>(pub Ident<'a>, pub Vec<Descriptor<'a>>);
 pub struct Edge<'a>(pub Vec<EdgeLogic<'a>>);
 
 pub enum GraphError<'a> {
-    DuplicateNode((usize, Ident<'a>, usize)),
-    MissingNode((usize, Ident<'a>, usize)),
-    DuplicateEdge(usize, Ident<'a>, Arrow, Ident<'a>, usize),
+    DuplicateNode(Span<Ident<'a>>),
+    MissingNode(Span<Ident<'a>>),
+    DuplicateEdge(Span<(Ident<'a>, Arrow, Ident<'a>)>),
 }
 
 fn add_node<'a>(
@@ -77,39 +77,33 @@ fn add_connection<'a>(
             if !graph.contains_edge(left, right) {
                 graph.add_edge(left, right, Edge(logic))
             } else {
-                return Err(GraphError::DuplicateEdge(
+                return Err(GraphError::DuplicateEdge(Span(
                     connection.left.0,
-                    connection.left.1,
-                    Arrow::Right,
-                    connection.right.1,
+                    (connection.left.1, Arrow::Right, connection.right.1),
                     connection.right.2,
-                ));
+                )));
             }
         }
         Arrow::Left => {
             if !graph.contains_edge(right, left) {
                 graph.add_edge(right, left, Edge(logic))
             } else {
-                return Err(GraphError::DuplicateEdge(
+                return Err(GraphError::DuplicateEdge(Span(
                     connection.left.0,
-                    connection.left.1,
-                    Arrow::Left,
-                    connection.right.1,
+                    (connection.left.1, Arrow::Left, connection.right.1),
                     connection.right.2,
-                ));
+                )));
             }
         }
         Arrow::Both => {
             let already_right = graph.contains_edge(left, right);
             let already_left = graph.contains_edge(right, left);
             if let Some(arrow) = Arrow::new(already_left, already_right) {
-                return Err(GraphError::DuplicateEdge(
+                return Err(GraphError::DuplicateEdge(Span(
                     connection.left.0,
-                    connection.left.1,
-                    arrow,
-                    connection.right.1,
+                    (connection.left.1, arrow, connection.right.1),
                     connection.right.2,
-                ));
+                )));
             } else {
                 graph.add_edge(left, right, Edge(logic.clone()));
                 graph.add_edge(right, left, Edge(logic))
@@ -171,11 +165,11 @@ impl Display for Edge<'_> {
 impl Display for GraphError<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            GraphError::DuplicateNode((_, name, _)) => write!(f, "Duplicate node: {}", name),
-            GraphError::MissingNode((_, name, _)) => {
+            GraphError::DuplicateNode(Span(_, name, _)) => write!(f, "Duplicate node: {}", name),
+            GraphError::MissingNode(Span(_, name, _)) => {
                 write!(f, "Node used before it was defined: {}", name)
             }
-            GraphError::DuplicateEdge(_, left, arrow, right, _) => {
+            GraphError::DuplicateEdge(Span(_, (left, arrow, right), _)) => {
                 write!(f, "Duplicate edge: {} {} {}", left, arrow, right)
             }
         }

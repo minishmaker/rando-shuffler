@@ -2,16 +2,16 @@ use super::*;
 
 #[test]
 fn test_descriptor() {
-    let keyword = (0, "foo", 3);
+    let keyword = Span(0, "foo", 3);
     let idents = vec![
-        (
+        Span(
             4,
             FullIdent::Global {
                 ident: Ident::Normal("Bar"),
             },
             8,
         ),
-        (
+        Span(
             9,
             FullIdent::Namespaced {
                 idents: vec![Ident::Normal("Baz")],
