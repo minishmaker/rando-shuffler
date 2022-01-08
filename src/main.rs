@@ -6,15 +6,24 @@ use rando_parser::logic::LogicError;
 use rando_util::graph;
 use regex::Regex;
 use std::collections::HashMap;
-use std::io::{self, Read};
+use std::env;
+use std::fs::File;
+use std::io::{self, Read, Write};
 
 fn main() -> io::Result<()> {
+    let path = env::args().skip(1).next()
+        .unwrap_or_else(|| panic!("Expected logic path as first argument"));
+
     let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
+    File::open(&path)
+        .expect("unable to open file")
+        .read_to_string(&mut input)
+        .expect("unable to read string");
+
     let tree = match rando_parser::logic::parse(&input, &["area", "room"]) {
         Ok(t) => t,
         Err(e) => {
-            output_errors(e, &input).unwrap();
+            output_errors(e, &input, &path).unwrap();
             std::process::exit(1)
         }
     };
@@ -55,13 +64,18 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn output_errors(error: LogicError<'_, '_>, source: &str) -> Result<(), files::Error> {
+fn output_errors(error: LogicError<'_, '_>, source: &str, path: &str) -> Result<(), files::Error> {
     use term::termcolor::{ColorChoice, StandardStream};
-    let file = SimpleFile::new("stdin", source);
+    let file = SimpleFile::new(path, source);
     let mut stdout = StandardStream::stdout(ColorChoice::Auto);
-    for diagnostic in error.diagnostics((), source) {
+    let diagnostics = error.diagnostics((), source);
+    let count = diagnostics.len();
+    for diagnostic in diagnostics {
         term::emit(&mut stdout, &Config::default(), &file, &diagnostic)?;
     }
+
+    writeln!(&mut stdout, "Parsing failed: {} errors detected", count)
+        .unwrap();
 
     Ok(())
 }

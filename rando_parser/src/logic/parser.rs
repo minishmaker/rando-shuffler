@@ -1,17 +1,18 @@
-use std::convert::identity;
-
 use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, line_ending, not_line_ending, one_of, space0, space1},
-    combinator::{all_consuming, eof, map_res, opt, success, value},
-    multi::{many0, many1, separated_list1},
+    combinator::{all_consuming, cut, eof, opt, value},
+    error::context,
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult, Parser,
 };
 
 use crate::common::{
-    parser::{full_ident, ident_part, keyword, ls, require, sticky},
+    error::{
+        many0_accumulate, many1_accumulate, recoverable, separated_list1_accumulate, ParseError, cut_custom, throw,
+    },
+    parser::{full_ident, ident_part, keyword, ls, sticky},
     span::{span, Span},
 };
 
@@ -21,34 +22,27 @@ use super::{
 };
 
 pub mod error;
-use error::{ParseError, ParseErrorKind};
+use error::LogicParseError;
 
 #[cfg(test)]
 mod test;
 
-//type ParseResult<'a, T> = IResult<&'a str, Result<T, ParseError<'a>>, ParseError<'a>>;
+type ParseResult<'a, T> = IResult<&'a str, T, ParseError<'a, LogicParseError<'a>>>;
 
-pub fn parse_items(full: &str) -> Result<Vec<Item>, ParseError> {
+pub fn parse_items(full: &str) -> Result<Vec<Item>, ParseError<LogicParseError>> {
     let indent = Indent::empty();
-    all_consuming(many0(preceded(indent, move |input| {
+    all_consuming(many0_accumulate(preceded(indent, move |input| {
         item(indent, full, input)
     })))(full)
     .finish()
     .map(|(_, items)| items)
 }
 
-fn item<'a>(
-    indent: Indent<'a>,
-    full: &'a str,
-    input: &'a str,
-) -> IResult<&'a str, Item<'a>, ParseError<'a>> {
+fn item<'a>(indent: Indent<'a>, full: &'a str, input: &'a str) -> ParseResult<'a, Item<'a>> {
     pair(
         |input| header(full, input),
         alt((
-            preceded(
-                ls(char(':')),
-                require(|input| children(indent, full, input)),
-            ),
+            preceded(ls(char(':')), cut(|input| children(indent, full, input))),
             comment_line_end.map(|_| Vec::new()),
         )),
     )
@@ -60,7 +54,7 @@ fn children<'a>(
     indent: Indent<'a>,
     full: &'a str,
     input: &'a str,
-) -> IResult<&'a str, Vec<Item<'a>>, ParseError<'a>> {
+) -> ParseResult<'a, Vec<Item<'a>>> {
     alt((
         |input| inline_children(full, input),
         |input| block_children(indent, full, input),
@@ -71,35 +65,28 @@ fn block_children<'a>(
     indent: Indent<'a>,
     full: &'a str,
     input: &'a str,
-) -> IResult<&'a str, Vec<Item<'a>>, ParseError<'a>> {
+) -> ParseResult<'a, Vec<Item<'a>>> {
     let (input, indent) = get_indent(indent, input).map_err(|i| {
         println!("{:?}", i);
         i
     })?;
 
-    let error_check = require(map_res(opt(space1), |s| {
-        if let Some(actual) = s {
-            Err(ParseErrorKind::WrongIndent {
-                base: indent.space,
-                actual,
-            })
-        } else {
-            Ok(())
+    let error_check = cut_custom::<(), _, _>(throw(space1, |actual| {
+        LogicParseError::WrongIndent {
+            base: indent.space,
+            actual,
         }
     }));
 
-    many1(preceded(pair(indent, error_check), move |input| {
+    many1_accumulate(preceded(pair(indent, opt(error_check)), move |input| {
         item(indent, full, input)
     }))(input)
 }
 
-fn inline_children<'a>(
-    full: &'a str,
-    input: &'a str,
-) -> IResult<&'a str, Vec<Item<'a>>, ParseError<'a>> {
+fn inline_children<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Vec<Item<'a>>> {
     terminated(
         alt((
-            separated_list1(
+            separated_list1_accumulate(
                 ls(char(',')),
                 (|input| node_header(full, input)).map(|h| Item {
                     header: h,
@@ -112,21 +99,24 @@ fn inline_children<'a>(
     )(input)
 }
 
-fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>, ParseError<'a>> {
+fn logic_sugar<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Item<'a>> {
     let mut op = sticky(one_of("&|"));
-    let mut backup = require(map_res(one_of("&|"), |o| {
-        Err(ParseErrorKind::OpMix {
-            expected: if o == '&' { '|' } else { '&' },
-        })
-    }));
+    let mut op_recover = alt((
+        &mut op,
+        recoverable(cut_custom(throw(span(full, one_of("&|")), |o| {
+            LogicParseError::OpMix {
+                expected: o.map(|c| if c == '&' { '|' } else { '&' }),
+            }
+        })))
+    ));
 
     let (input, Span(start, children, end)) = {
         span(
             full,
             delimited(
                 char('('),
-                require(separated_list1(
-                    &mut op,
+                cut(separated_list1_accumulate(
+                    &mut op_recover,
                     ls(alt((
                         (|input| node_header(full, input)).map(|h| Item {
                             header: h,
@@ -135,11 +125,12 @@ fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>, 
                         |input| logic_sugar(full, input),
                     ))),
                 )),
-                alt((char(')'), &mut backup)),
+                cut(char(')')),
             ),
         )(input)?
     };
 
+    std::mem::drop(op_recover);
     // If it matches &, it must be &
     let op = op("&").is_ok().then(|| "and").unwrap_or("or");
     let header = ItemHeader::Node {
@@ -147,24 +138,20 @@ fn logic_sugar<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, Item<'a>, 
         keyword: Span(start, op, end),
         idents: Vec::new(),
     };
-
     Ok((input, Item { header, children }))
 }
 
-fn header<'a>(full: &'a str, input: &'a str) -> IResult<&'a str, ItemHeader<'a>, ParseError<'a>> {
+fn header<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, ItemHeader<'a>> {
     alt((
         |input| node_header(full, input),
         |input| edge_header(full, input),
     ))(input)
 }
 
-fn node_header<'a>(
-    full: &'a str,
-    input: &'a str,
-) -> IResult<&'a str, ItemHeader<'a>, ParseError<'a>> {
+fn node_header<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, ItemHeader<'a>> {
     tuple((
         span(full, keyword),
-        many0(ls(span(full, full_ident))),
+        many0_accumulate(ls(span(full, full_ident))),
         opt(char('+')),
     ))
     .map(|(k, i, a)| ItemHeader::Node {
@@ -175,14 +162,11 @@ fn node_header<'a>(
     .parse(input)
 }
 
-fn edge_header<'a>(
-    full: &'a str,
-    input: &'a str,
-) -> IResult<&'a str, ItemHeader<'a>, ParseError<'a>> {
+fn edge_header<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, ItemHeader<'a>> {
     tuple((
         span(full, ident_part),
-        require(ls(span(full, arrow))),
-        require(span(full, ident_part)),
+        cut(ls(span(full, arrow))),
+        cut(span(full, ident_part)),
     ))
     .map(|(l, a, r)| ItemHeader::Edge {
         left: l,
@@ -192,15 +176,17 @@ fn edge_header<'a>(
     .parse(input)
 }
 
-fn arrow(input: &str) -> IResult<&str, Arrow, ParseError> {
-    alt((
-        preceded(tag("<-"), opt(char('>'))).map(|r| Arrow::new(true, r.is_some()).unwrap()),
-        value(Arrow::Right, tag("->")),
-        map_res(success(Err(ParseErrorKind::Arrow)), identity),
-    ))(input)
+fn arrow(input: &str) -> ParseResult<Arrow> {
+    context(
+        "arrow",
+        alt((
+            preceded(tag("<-"), opt(char('>'))).map(|r| Arrow::new(true, r.is_some()).unwrap()),
+            value(Arrow::Right, tag("->")),
+        )),
+    )(input)
 }
 
-pub fn comment_line_end(input: &str) -> IResult<&str, Option<&str>, ParseError> {
+pub fn comment_line_end(input: &str) -> ParseResult<Option<&str>> {
     delimited(
         space0,
         opt(preceded(char('#'), not_line_ending)),

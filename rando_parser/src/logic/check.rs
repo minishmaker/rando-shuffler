@@ -1,10 +1,14 @@
+use std::convert::identity;
+
 use crate::{common::span::Span, FullIdent, Ident};
 
-use self::error::{accumulate_errors, merge_results, ItemType};
+use self::error::{merge_results, ItemType};
 
 use super::ast::{
     Descriptor, Edge, EdgeLogic, GraphItem, Item, ItemHeader, Node, Scope, ScopeChild,
 };
+
+use crate::common::error::{accumulate_errors as generic_accumulate_errors, vec_merge};
 
 mod error;
 
@@ -12,6 +16,13 @@ mod error;
 mod test;
 
 pub use error::TreeError;
+
+fn accumulate_errors<'a, 'b, T>(
+    acc: Result<Vec<T>, TreeError<'a, 'b>>,
+    result: Result<T, TreeError<'a, 'b>>,
+) -> Result<Vec<T>, TreeError<'a, 'b>> {
+    generic_accumulate_errors(acc, result, vec_merge, TreeError::merge, identity)
+}
 
 fn flatten_idents<'a>(
     keyword: Span<&'a str>,

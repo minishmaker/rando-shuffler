@@ -76,25 +76,6 @@ where
     }
 }
 
-pub fn accumulate_errors<'a, 'b, T>(
-    a: Result<Vec<T>, TreeError<'a, 'b>>,
-    b: Result<T, TreeError<'a, 'b>>,
-) -> Result<Vec<T>, TreeError<'a, 'b>> {
-    match a {
-        Ok(mut v) => {
-            v.push(b?);
-            Ok(v)
-        }
-        Err(e) => {
-            if let Err(b) = b {
-                Err(e.merge(b))
-            } else {
-                Err(e)
-            }
-        }
-    }
-}
-
 impl<'a> ItemType<'a> {
     fn matches(self, other: Self) -> bool {
         self == other || matches!((other, self), (ItemType::Logic, ItemType::Descriptor))

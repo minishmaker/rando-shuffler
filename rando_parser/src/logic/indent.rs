@@ -1,19 +1,16 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{space0, space1},
-    combinator::{map_res, peek, recognize},
+    character::complete::{line_ending, not_line_ending, space0, space1},
+    combinator::{cut, map_res, peek, recognize},
     multi::many0,
-    sequence::{pair, preceded},
+    sequence::{pair, preceded, terminated},
     IResult, Parser,
 };
 
-use crate::common::parser::require;
+use crate::common::error::{recoverable, ParseError};
 
-use super::parser::{
-    comment_line_end,
-    error::{ParseError, ParseErrorKind},
-};
+use super::parser::{comment_line_end, error::LogicParseError};
 
 /// Parser for an indentation level.
 /// Skips any preceeding blank or comment lines, then matches the given indentation
@@ -32,19 +29,14 @@ impl Indent<'_> {
     }
 }
 
-impl<'a> Parser<&'a str, &'a str, ParseError<'a>> for Indent<'a> {
-    fn parse(&mut self, input: &'a str) -> IResult<&'a str, &'a str, ParseError<'a>> {
+impl<'a> Parser<&'a str, &'a str, ParseError<'a, LogicParseError<'a>>> for Indent<'a> {
+    fn parse(
+        &mut self,
+        input: &'a str,
+    ) -> IResult<&'a str, &'a str, ParseError<'a, LogicParseError<'a>>> {
         preceded(
             many0(comment_line_end),
-            alt((
-                tag(self.space),
-                map_res(space0, |actual| {
-                    Err(ParseErrorKind::WrongIndent {
-                        base: self.space,
-                        actual,
-                    })
-                }),
-            )),
+            tag(self.space),
         )(input)
     }
 }
@@ -54,17 +46,20 @@ impl<'a> Parser<&'a str, &'a str, ParseError<'a>> for Indent<'a> {
 pub fn get_indent<'a>(
     prev: Indent<'a>,
     input: &'a str,
-) -> IResult<&'a str, Indent<'a>, ParseError<'a>> {
+) -> IResult<&'a str, Indent<'a>, ParseError<'a, LogicParseError<'a>>> {
     preceded(
         many0(comment_line_end),
         alt((
             peek(recognize(pair(prev, space1))),
-            require(map_res(space0, |actual| {
-                Err(ParseErrorKind::WrongIndent {
-                    base: prev.space,
-                    actual,
-                })
-            })),
+            recoverable(cut(map_res(
+                terminated(space0, pair(not_line_ending, line_ending)),
+                |actual| {
+                    Err(LogicParseError::WrongIndent {
+                        base: prev.space,
+                        actual,
+                    })
+                },
+            ))),
         )),
     )
     .map(Indent::new)

@@ -22,11 +22,11 @@ where
 
 pub fn keyword<'a, E>(input: &'a str) -> IResult<&str, &str, E>
 where
-    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError>,
+    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError<'a>>,
 {
     alt((
         keyword_unchecked,
-        map_res(ident_part_unchecked, |_| Err(CommonError::ExpectedKeyword)),
+        map_res(recognize(ident_part_unchecked), |i| Err(CommonError::ExpectedKeyword(i))),
     ))(input)
 }
 
@@ -36,7 +36,7 @@ fn keyword_unchecked<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str
 
 pub fn full_ident<'a, E>(input: &'a str) -> IResult<&str, FullIdent<'_>, E>
 where
-    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError>,
+    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError<'a>>,
 {
     alt((
         separated_list1(char('.'), ident_part).map(|idents| FullIdent::Namespaced { idents }),
@@ -46,11 +46,11 @@ where
 
 pub fn ident_part<'a, E>(input: &'a str) -> IResult<&str, Ident<'_>, E>
 where
-    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError>,
+    E: ParseError<&'a str> + FromExternalError<&'a str, CommonError<'a>>,
 {
     alt((
         ident_part_unchecked,
-        map_res(keyword_unchecked, |_| Err(CommonError::ExpectedIdent)),
+        map_res(keyword_unchecked, |k| Err(CommonError::ExpectedIdent(k))),
     ))(input)
 }
 
@@ -125,20 +125,5 @@ where
                 Ok((input, parsed))
             }
         }
-    }
-}
-
-/// Upgrades errors to failures. For some reason, this isn't in base nom.
-pub fn require<'a: 'b, 'b, F: 'b, O: Clone, E: ParseError<&'a str>>(
-    mut inner: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
-where
-    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
-{
-    move |input| {
-        inner(input).map_err(|e| match e {
-            nom::Err::Error(e) => nom::Err::Failure(e),
-            e => e,
-        })
     }
 }
