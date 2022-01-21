@@ -26,7 +26,9 @@ where
 {
     alt((
         keyword_unchecked,
-        map_res(recognize(ident_part_unchecked), |i| Err(CommonError::ExpectedKeyword(i))),
+        map_res(recognize(ident_part_unchecked), |i| {
+            Err(CommonError::ExpectedKeyword(i))
+        }),
     ))(input)
 }
 

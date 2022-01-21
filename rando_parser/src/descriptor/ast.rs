@@ -2,8 +2,7 @@ use crate::{common::span::Span, FullIdent, Ident};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct RuleDef<'a> {
-    pub name: &'a str,
-    pub values: Vec<Value<'a>>,
+    pub reference: Reference<'a>,
     pub body: RuleBody<'a>,
 }
 
@@ -17,7 +16,6 @@ pub enum Value<'a> {
 pub struct Reference<'a> {
     pub keyword: Span<&'a str>,
     pub values: Vec<Span<Value<'a>>>,
-    pub end: usize,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -31,6 +29,8 @@ pub enum RuleBody<'a> {
     County(RuleBodyCounty<'a>),
     Truthy(RuleBodyTruthy<'a>),
     Reference(Reference<'a>),
+    And(Vec<RuleBody<'a>>),
+    Or(Vec<RuleBody<'a>>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]

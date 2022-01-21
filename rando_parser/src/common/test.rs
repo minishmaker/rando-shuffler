@@ -1,10 +1,10 @@
-use codespan_reporting::diagnostic::Diagnostic;
-use nom::{bytes::complete::tag, branch::alt, Err as NomErr};
 use assert_matches::assert_matches;
+use codespan_reporting::diagnostic::Diagnostic;
+use nom::{branch::alt, bytes::complete::tag, Err as NomErr};
 
 use crate::common::error::cut_custom;
 
-use super::error::{many0_accumulate, RandoError, CommonError, throw, recoverable};
+use super::error::{many0_accumulate, recoverable, throw, CommonError, RandoError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum TestParseError<'a> {
@@ -18,7 +18,7 @@ fn test_accumulate() {
     let mut parser = many0_accumulate(alt((
         tag("a"),
         cut_custom(throw(tag("b"), |_| TestParseError::B)),
-        recoverable(cut_custom(throw(tag("c"), |_| TestParseError::C)))
+        recoverable(cut_custom(throw(tag("c"), |_| TestParseError::C))),
     )));
 
     let input = "aaaa";

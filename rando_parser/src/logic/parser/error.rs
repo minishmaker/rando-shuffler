@@ -1,9 +1,12 @@
 use codespan_reporting::diagnostic::{Diagnostic, Label, LabelStyle};
 
-use crate::{common::{
-    error::{CommonError, RandoError},
-    span,
-}, Span};
+use crate::{
+    common::{
+        error::{CommonError, RandoError},
+        span,
+    },
+    Span,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LogicParseError<'a> {
@@ -48,16 +51,12 @@ impl<'a> LogicParseError<'a> {
         }
     }
 
-    fn diagnostic_labels<F: Clone>(
-        &self,
-        input: &'a str,
-        file: &F,
-    ) -> Vec<Label<F>> {
+    fn diagnostic_labels<F: Clone>(&self, input: &'a str, file: &F) -> Vec<Label<F>> {
         let range = match self {
             LogicParseError::WrongIndent { actual, .. } => {
                 let start = span::substr_index(input, actual).unwrap();
                 Some(start..start + actual.len())
-            },
+            }
             LogicParseError::OpMix { expected } => Some(expected.range()),
             _ => None,
         };

@@ -58,11 +58,10 @@ where
 {
     move |input| {
         let (next, out) = parser(input)?;
-        let end = substr_index(full, next)
-            .unwrap_or_else(|| {
-                eprintln!("full {:p}, input {:p}", full.as_ptr(), next.as_ptr());
-                panic!("full and input are from different strings!")
-            });
+        let end = substr_index(full, next).unwrap_or_else(|| {
+            eprintln!("full {:p}, input {:p}", full.as_ptr(), next.as_ptr());
+            panic!("full and input are from different strings!")
+        });
         let len = input.len() - next.len();
         Ok((next, Span(end - len, out, end)))
     }

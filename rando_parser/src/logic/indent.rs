@@ -34,10 +34,7 @@ impl<'a> Parser<&'a str, &'a str, ParseError<'a, LogicParseError<'a>>> for Inden
         &mut self,
         input: &'a str,
     ) -> IResult<&'a str, &'a str, ParseError<'a, LogicParseError<'a>>> {
-        preceded(
-            many0(comment_line_end),
-            tag(self.space),
-        )(input)
+        preceded(many0(comment_line_end), tag(self.space))(input)
     }
 }
 

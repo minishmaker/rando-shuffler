@@ -10,7 +10,8 @@ use nom::{
 
 use crate::common::{
     error::{
-        many0_accumulate, many1_accumulate, recoverable, separated_list1_accumulate, ParseError, cut_custom, throw,
+        cut_custom, many0_accumulate, many1_accumulate, recoverable, separated_list1_accumulate,
+        throw, ParseError,
     },
     parser::{full_ident, ident_part, keyword, ls, sticky},
     span::{span, Span},
@@ -71,12 +72,11 @@ fn block_children<'a>(
         i
     })?;
 
-    let error_check = cut_custom::<(), _, _>(throw(space1, |actual| {
-        LogicParseError::WrongIndent {
+    let error_check =
+        cut_custom::<(), _, _>(throw(space1, |actual| LogicParseError::WrongIndent {
             base: indent.space,
             actual,
-        }
-    }));
+        }));
 
     many1_accumulate(preceded(pair(indent, opt(error_check)), move |input| {
         item(indent, full, input)
@@ -107,7 +107,7 @@ fn logic_sugar<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Item<'a>> {
             LogicParseError::OpMix {
                 expected: o.map(|c| if c == '&' { '|' } else { '&' }),
             }
-        })))
+        }))),
     ));
 
     let (input, Span(start, children, end)) = {
