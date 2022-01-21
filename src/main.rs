@@ -1,9 +1,9 @@
 use codespan_reporting::files::{self, SimpleFile};
 use codespan_reporting::term::{self, Config};
 use petgraph::dot::Dot;
+use rando_core::graph;
 use rando_parser::logic::ast::ScopeChild;
 use rando_parser::logic::LogicError;
-use rando_util::graph;
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;
@@ -11,7 +11,9 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 
 fn main() -> io::Result<()> {
-    let path = env::args().skip(1).next()
+    let path = env::args()
+        .skip(1)
+        .next()
         .unwrap_or_else(|| panic!("Expected logic path as first argument"));
 
     let mut input = String::new();
@@ -74,8 +76,7 @@ fn output_errors(error: LogicError<'_, '_>, source: &str, path: &str) -> Result<
         term::emit(&mut stdout, &Config::default(), &file, &diagnostic)?;
     }
 
-    writeln!(&mut stdout, "Parsing failed: {} errors detected", count)
-        .unwrap();
+    writeln!(&mut stdout, "Parsing failed: {} errors detected", count).unwrap();
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 [package]
-name = "rando_util"
+name = "rando_core"
 version = "0.1.0"
 authors = ["berylliosis <berylliumninja@gmail.com>"]
 edition = "2021"

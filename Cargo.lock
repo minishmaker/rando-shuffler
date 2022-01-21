@@ -89,6 +89,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rando_core"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+ "rando_parser",
+]
+
+[[package]]
 name = "rando_parser"
 version = "0.1.0"
 dependencies = [
@@ -103,17 +111,9 @@ version = "0.1.0"
 dependencies = [
  "codespan-reporting",
  "petgraph",
+ "rando_core",
  "rando_parser",
- "rando_util",
  "regex",
-]
-
-[[package]]
-name = "rando_util"
-version = "0.1.0"
-dependencies = [
- "petgraph",
- "rando_parser",
 ]
 
 [[package]]
