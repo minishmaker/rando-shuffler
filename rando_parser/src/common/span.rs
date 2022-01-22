@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use nom::IResult;
+use nom::{IResult, Parser};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Span<T>(pub usize, pub T, pub usize);
@@ -54,15 +54,39 @@ pub fn span<'a: 'b, 'b, F: 'b, O, E>(
     mut parser: F,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Span<O>, E>
 where
-    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
+    F: Parser<&'a str, O, E>,
 {
     move |input| {
-        let (next, out) = parser(input)?;
+        let (next, out) = parser.parse(input)?;
         let end = substr_index(full, next).unwrap_or_else(|| {
             eprintln!("full {:p}, input {:p}", full.as_ptr(), next.as_ptr());
             panic!("full and input are from different strings!")
         });
         let len = input.len() - next.len();
         Ok((next, Span(end - len, out, end)))
+    }
+}
+
+
+pub fn span_ok<'a: 'b, 'b, F: 'b, T, U, E>(
+    full: &'a str,
+    mut parser: F,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Result<Span<T>, U>, E>
+where
+    F: Parser<&'a str, Result<T, U>, E>,
+{
+    move |input| {
+        let (next, out) = parser.parse(input)?;
+
+        let out = out.map(|s| {
+            let end = substr_index(full, next).unwrap_or_else(|| {
+                eprintln!("full {:p}, input {:p}", full.as_ptr(), next.as_ptr());
+                panic!("full and input are from different strings!")
+            });
+            let len = input.len() - next.len();
+            Span(end - len, s, end)
+        });
+        
+        Ok((next, out))
     }
 }

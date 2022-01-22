@@ -1,4 +1,4 @@
-use std::{convert::identity, ops::Range};
+use std::{ops::Range, marker::PhantomData, convert::identity};
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use nom::{
@@ -6,8 +6,8 @@ use nom::{
     error::{
         ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError as NomParseError,
     },
-    sequence::preceded,
-    Err as NomErr, IResult, Parser,
+    sequence::pair,
+    Err as NomErr, IResult, Parser, multi::fold_many0,
 };
 
 use super::{
@@ -67,39 +67,9 @@ pub struct ParseError<'a, E: RandoError<'a>> {
     nom: Option<Result<char, NomErrorKind>>,
     remaining: &'a str,
     context: Option<&'static str>,
-    recoverable: bool,
 }
 
 impl<'a, E: RandoError<'a>> ParseError<'a, E> {
-    /// Merges two parse errors. Takes the custom errors from both.
-    /// The error is recoverable if both errors are recoverable.
-    /// Otherwise, `other`'s fields take priority (as it is expected to be later)
-    fn merge(mut self, mut other: Self) -> Self {
-        self.custom.append(&mut other.custom);
-        Self {
-            custom: self.custom,
-            nom: other.nom.or(self.nom),
-            context: other.context.or(self.context),
-            recoverable: self.recoverable && other.recoverable,
-            remaining: other.remaining,
-        }
-    }
-
-    pub fn to_recoverable(self) -> Self {
-        Self {
-            recoverable: !self.nom.is_some(),
-            ..self
-        }
-    }
-
-    pub fn recoverable(&self) -> bool {
-        self.recoverable
-    }
-
-    pub fn remaining(&self) -> &'a str {
-        self.remaining
-    }
-
     pub fn custom(&self) -> &[E] {
         &self.custom[..]
     }
@@ -151,14 +121,12 @@ impl<'a, E: RandoError<'a>> NomParseError<&'a str> for ParseError<'a, E> {
             nom: Some(Err(kind)),
             context: None,
             remaining: input,
-            recoverable: false,
         }
     }
 
     fn append(input: &'a str, kind: NomErrorKind, other: Self) -> Self {
         Self {
             nom: other.nom.or(Some(Err(kind))),
-            recoverable: false,
             remaining: input,
             ..other
         }
@@ -170,7 +138,6 @@ impl<'a, E: RandoError<'a>> NomParseError<&'a str> for ParseError<'a, E> {
             nom: Some(Ok(c)),
             remaining: input,
             context: None,
-            recoverable: false,
         }
     }
 }
@@ -189,7 +156,6 @@ impl<'a, E: RandoError<'a>> FromExternalError<&'a str, E> for ParseError<'a, E> 
             remaining: input,
             nom: None,
             context: None,
-            recoverable: false,
         }
     }
 }
@@ -201,56 +167,47 @@ impl<'a, E: RandoError<'a>> FromExternalError<&'a str, CommonError<'a>> for Pars
             remaining: input,
             nom: None,
             context: None,
-            recoverable: false,
         }
     }
 }
 
-pub struct ThenAccumulate<P, Q> {
-    p: P,
-    q: Q,
+impl<'a, E: RandoError<'a>> From<Vec<E>> for ParseError<'a, E> {
+    fn from(custom: Vec<E>) -> Self {
+        Self {
+            custom,
+            remaining: "",
+            nom: None,
+            context: None,
+        }
+    }
 }
 
-impl<'a, P, Q, T, O, E> Parser<&'a str, (T, O), ParseError<'a, E>> for ThenAccumulate<P, Q>
+pub struct MapOk<P, F, T, U>(P, F, PhantomData<T>, PhantomData<U>) where F: FnMut(T) -> U;
+
+impl<'a, P, F, T, U, E> Parser<&'a str, Result<U, Vec<E>>, ParseError<'a, E>> for MapOk<P, F, T, U>
 where
     E: RandoError<'a>,
-    P: Parser<&'a str, T, ParseError<'a, E>>,
-    Q: Parser<&'a str, O, ParseError<'a, E>>,
+    P: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
+    F: FnMut(T) -> U,
 {
-    fn parse(&mut self, input: &'a str) -> IResult<&'a str, (T, O), ParseError<'a, E>> {
-        let (input, res1) = self.p.parse_accumulate(input)?;
-        let (input, res2) = self.q.parse_accumulate(input)?;
-        match (res1, res2) {
-            (Ok(t), Ok(o)) => Ok((input, (t, o))),
-            (Err(e1), Err(e2)) => Err(NomErr::Failure(e1.merge(e2))),
-            (Err(e), _) | (_, Err(e)) => Err(NomErr::Failure(e)),
-        }
+    fn parse(&mut self, input: &'a str) -> IResult<&'a str, Result<U, Vec<E>>, ParseError<'a, E>> {
+        self.0.parse(input)
+            .map(|(i, r)| (i, r.map(&mut self.1)))
     }
 }
 
-pub trait ParseExt<'a, T, E: RandoError<'a>>: Parser<&'a str, T, ParseError<'a, E>> {
-    fn parse_accumulate(
-        &mut self,
-        input: &'a str,
-    ) -> IResult<&'a str, Result<T, ParseError<'a, E>>, ParseError<'a, E>> {
-        match self.parse(input) {
-            Err(NomErr::Failure(f)) => Ok((f.remaining, Err(f))),
-            Err(e) => Err(e),
-            Ok((i, t)) => Ok((i, Ok(t))),
-        }
-    }
-
-    fn then_accumulate<Q, O>(self, q: Q) -> ThenAccumulate<Self, Q>
+pub trait ParseExt<'a, T, E: RandoError<'a>>: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>> {
+    fn map_ok<F, U>(self, f: F) -> MapOk<Self, F, T, U>
     where
         Self: Sized,
-        Q: Parser<&'a str, O, ParseError<'a, E>>,
+        F: FnMut(T) -> U
     {
-        ThenAccumulate { p: self, q }
+        MapOk(self, f, PhantomData, PhantomData)
     }
 }
 
 impl<'a, P, T, E: RandoError<'a>> ParseExt<'a, T, E> for P where
-    P: Parser<&'a str, T, ParseError<'a, E>>
+    P: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>
 {
 }
 
@@ -278,54 +235,14 @@ pub fn accumulate_errors<'a, A, T, B, E>(
     }
 }
 
-pub fn recoverable<'a: 'b, 'b, T, E, F>(
-    mut f: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, T, ParseError<'a, E>> + 'b
-where
-    E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>> + 'b,
-{
-    move |i| {
-        f.parse(i).map_err(|mut e| {
-            if let NomErr::Error(err) | NomErr::Failure(err) = &mut e {
-                err.recoverable = err.nom.is_none();
-            }
-            e
-        })
-    }
-}
-
-pub fn cut_custom<'a: 'b, 'b, T, E, F>(
-    mut f: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, T, ParseError<'a, E>> + 'b
-where
-    E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>> + 'b,
-{
-    move |i| {
-        f.parse(i).map_err(|e| match e {
-            NomErr::Error(e) if e.nom.is_none() => NomErr::Failure(e),
-            e => e,
-        })
-    }
-}
-
-pub fn throw<'a: 'b, 'b, T, O, E, F, G>(
-    mut f: F,
-    mut g: G,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, ParseError<'a, E>> + 'b
-where
-    E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>> + 'b,
-    G: FnMut(T) -> E + 'b,
-{
-    move |i| match f.parse(i) {
-        Ok((i, t)) => Err(NomErr::Error(ParseError::from_external_error(
-            i,
-            NomErrorKind::MapRes,
-            g(t),
-        ))),
-        Err(e) => Err(e),
+pub fn merge_tuple<T, U, E>(first: Result<T, Vec<E>>, second: Result<U, Vec<E>>) -> Result<(T, U), Vec<E>> {
+    match (first, second) {
+        (Ok(t), Ok(u)) => Ok((t, u)),
+        (Err(mut t), Err(mut u)) => {
+            t.append(&mut u);
+            Err(t)
+        },
+        (Err(e), _) | (_, Err(e)) => Err(e),
     }
 }
 
@@ -333,29 +250,28 @@ pub fn fold_many0_accumulate<'a, A, T, E, F, G, H>(
     mut f: F,
     mut init: H,
     mut g: G,
-) -> impl FnMut(&'a str) -> IResult<&'a str, A, ParseError<'a, E>>
+) -> impl FnMut(&'a str) -> IResult<&'a str, Result<A, Vec<E>>, ParseError<'a, E>>
 where
     E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>>,
+    F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
     G: FnMut(A, T) -> A,
-    H: FnMut() -> Result<A, ParseError<'a, E>>,
+    H: FnMut() -> Result<A, Vec<E>>,
 {
-    move |i| accumulate_inner(|i| f.parse(i), init(), &mut g, NomErrorKind::Many0, i)
+    move |i| accumulate_inner(|i| f.parse(i), init(), &mut g, i)
 }
 
 pub fn many0_accumulate<'a, T, E, F>(
     mut f: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<T>, ParseError<'a, E>>
+) -> impl FnMut(&'a str) -> IResult<&'a str, Result<Vec<T>, Vec<E>>, ParseError<'a, E>>
 where
     E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>>,
+    F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
 {
     move |i| {
         accumulate_inner(
             |i| f.parse(i),
             Ok(Vec::new()),
             vec_merge,
-            NomErrorKind::Many0,
             i,
         )
     }
@@ -363,119 +279,97 @@ where
 
 pub fn many1_accumulate<'a, T, E, F>(
     mut f: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<T>, ParseError<'a, E>>
+) -> impl FnMut(&'a str) -> IResult<&'a str, Result<Vec<T>, Vec<E>>, ParseError<'a, E>>
 where
     E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>>,
+    F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
 {
     move |i| {
-        let (input, acc) = match f.parse(i) {
-            Err(NomErr::Error(e)) => {
-                return Err(NomErr::Error(
-                    // Keep any previous semantic errors
-                    e.merge(ParseError::from_error_kind(i, NomErrorKind::Many1)),
-                ));
+        match f.parse(i) {
+            Err(NomErr::Error(_)) => {
+                Err(NomErr::Error(
+                    ParseError::from_error_kind(i, NomErrorKind::Many1),
+                ))
             }
-            Err(NomErr::Failure(e)) => (e.remaining, Err(e)),
-            Err(e) => return Err(e),
-            Ok((i, f)) => (i, Ok(vec![f])),
-        };
-
-        accumulate_inner(|i| f.parse(i), acc, vec_merge, NomErrorKind::Many1, input)
+            Err(e) => Err(e),
+            Ok((i, first)) => {
+                let acc = first.map(|f| vec![f]);
+                accumulate_inner(|i| f.parse(i), acc, vec_merge, i)
+            }
+        }
     }
 }
 
 pub fn separated_list0_accumulate<'a, T, O, E, F, G>(
     mut sep: G,
     mut f: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<T>, ParseError<'a, E>>
+) -> impl FnMut(&'a str) -> IResult<&'a str, Result<Vec<T>, Vec<E>>, ParseError<'a, E>>
 where
     E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>>,
-    G: Parser<&'a str, O, ParseError<'a, E>>,
+    F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
+    G: Parser<&'a str, Result<O, Vec<E>>, ParseError<'a, E>>,
 {
     move |i| {
-        let (input, acc) = match f.parse(i) {
-            Err(NomErr::Error(_)) => return Ok((i, Vec::new())),
-            Err(NomErr::Failure(e)) => (e.remaining, Err(e)),
-            Err(e) => return Err(e),
-            Ok((i, f)) => (i, Ok(vec![f])),
-        };
-
-        let mut f = preceded(|i| sep.parse(i), |i| f.parse(i));
-        accumulate_inner(&mut f, acc, vec_merge, NomErrorKind::SeparatedList, input)
+        match f.parse(i) {
+            Err(NomErr::Error(_)) => Ok((i, Ok(Vec::new()))),
+            Err(e) => Err(e),
+            Ok((i, first)) => {
+                let acc = first.map(|f| vec![f]);
+                let parser = pair(|i| sep.parse(i), |i| f.parse(i))
+                    .map(|(a, b)| merge_tuple(a, b))
+                    .map_ok(|(_, b)| b);
+                accumulate_inner(parser, acc, vec_merge, i)
+            }
+        }
     }
 }
 
 pub fn separated_list1_accumulate<'a, T, O, E, F, G>(
     mut sep: G,
     mut f: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<T>, ParseError<'a, E>>
+) -> impl FnMut(&'a str) -> IResult<&'a str, Result<Vec<T>, Vec<E>>, ParseError<'a, E>>
 where
     E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>>,
-    G: Parser<&'a str, O, ParseError<'a, E>>,
+    F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
+    G: Parser<&'a str, Result<O, Vec<E>>, ParseError<'a, E>>,
 {
     move |i| {
-        let (input, acc) = match f.parse(i) {
-            Err(NomErr::Error(e)) => {
-                return Err(NomErr::Error(
-                    // Keep any semantic errors from below
-                    e.merge(ParseError::from_error_kind(i, NomErrorKind::SeparatedList)),
-                ));
+        match f.parse(i) {
+            Err(NomErr::Error(_)) => {
+                Err(NomErr::Error(
+                    ParseError::from_error_kind(i, NomErrorKind::SeparatedList),
+                ))
             }
-            Err(NomErr::Failure(e)) => (e.remaining, Err(e)),
-            Err(e) => return Err(e),
-            Ok((i, f)) => (i, Ok(vec![f])),
-        };
-
-        accumulate_inner(
-            |i| {
-                (|i| sep.parse(i))
-                    .then_accumulate(|i| f.parse(i))
-                    .map(|(_, f)| f)
-                    .parse(i)
-            },
-            acc,
-            vec_merge,
-            NomErrorKind::SeparatedList,
-            input,
-        )
+            Err(e) => Err(e),
+            Ok((i, first)) => {
+                let acc = first.map(|f| vec![f]);
+                let parser = pair(|i| sep.parse(i), |i| f.parse(i))
+                    .map(|(a, b)| merge_tuple(a, b))
+                    .map_ok(|(_, b)| b);
+                accumulate_inner(parser, acc, vec_merge, i)
+            }
+        }
     }
 }
 
 fn accumulate_inner<'a, A, T, E, F, G>(
-    mut f: F,
-    mut acc: Result<A, ParseError<'a, E>>,
+    f: F,
+    acc: Result<A, Vec<E>>,
     mut merge: G,
-    kind: NomErrorKind,
-    mut i: &'a str,
-) -> IResult<&'a str, A, ParseError<'a, E>>
+    i: &'a str,
+) -> IResult<&'a str, Result<A, Vec<E>>, ParseError<'a, E>>
 where
     E: RandoError<'a>,
-    F: Parser<&'a str, T, ParseError<'a, E>>,
+    F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
     G: FnMut(A, T) -> A,
 {
-    loop {
-        let (i1, r) = match f.parse(i) {
-            Err(NomErr::Error(_)) => return acc.map(|v| (i, v)).map_err(NomErr::Failure),
-            Err(NomErr::Failure(f)) => (f.remaining, Err(f)),
-            Err(e) => return Err(e),
-            Ok((i1, t)) => (i1, Ok(t)),
-        };
-
-        if i1.len() == i.len() {
-            return Err(NomErr::Error(ParseError::from_error_kind(i, kind)));
-        }
-        i = i1;
-
-        acc = accumulate_errors(acc, r, &mut merge, ParseError::merge, identity);
-
-        if let Err(ParseError {
-            recoverable: false, ..
-        }) = acc
-        {
-            return acc.map(|_| unreachable!()).map_err(NomErr::Failure);
-        }
-    }
+    let mut acc = Some(acc);
+    fold_many0(
+        f,
+        move || acc.take().unwrap(),
+        |acc, result| accumulate_errors(acc, result, &mut merge, move |mut a, mut b| {
+            a.append(&mut b);
+            a
+        }, identity)
+    )(i)
 }

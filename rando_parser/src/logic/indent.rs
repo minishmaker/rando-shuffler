@@ -8,7 +8,7 @@ use nom::{
     IResult, Parser,
 };
 
-use crate::common::error::{recoverable, ParseError};
+use crate::common::error::ParseError;
 
 use super::parser::{comment_line_end, error::LogicParseError};
 
@@ -48,15 +48,13 @@ pub fn get_indent<'a>(
         many0(comment_line_end),
         alt((
             peek(recognize(pair(prev, space1))),
-            recoverable(cut(map_res(
-                terminated(space0, pair(not_line_ending, line_ending)),
-                |actual| {
+            cut(map_res(terminated(space0, pair(not_line_ending, line_ending)), |actual| {
                     Err(LogicParseError::WrongIndent {
                         base: prev.space,
                         actual,
                     })
                 },
-            ))),
+            )),
         )),
     )
     .map(Indent::new)

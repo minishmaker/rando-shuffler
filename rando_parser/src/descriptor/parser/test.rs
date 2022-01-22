@@ -1,5 +1,4 @@
 use assert_matches::assert_matches;
-use nom::Err as NomErr;
 
 use super::*;
 use crate::{descriptor::typecheck::DescriptorType, FullIdent};
@@ -14,9 +13,9 @@ fn test_rule() {
     let parser = |input| rule(input, input);
     assert_matches!(
         parser("rule(Full, gLob, vAr)\n\t=\n true  "),
-        Ok(("", RuleDef { .. }))
+        Ok(("", Ok(RuleDef { .. })))
     );
-    assert_matches!(parser("rule()\n\t=\n 3  \n"), Ok(("", RuleDef { .. })));
+    assert_matches!(parser("rule()\n\t=\n 3  \n"), Ok(("", Ok(RuleDef { .. }))));
 }
 
 #[test]
@@ -24,11 +23,11 @@ fn test_expr() {
     let parser = |input| expr::<RuleBodyTruthy>(input, input);
     assert_matches!(
         parser("true ; false, true ; ool "),
-        Ok((" ", RuleBodyTruthy::Or(_)))
+        Ok((" ", Ok(RuleBodyTruthy::Or(_))))
     );
-    assert_matches!(parser("1 ; 2, 4 ; 3 "), Err(NomErr::Failure(e)) => {
-        assert_eq!(e.custom().len(), 4);
-        for e in &e.custom()[..] {
+    assert_matches!(parser("1 ; 2, 4 ; 3 "), Ok((" ", Err(e))) => {
+        assert_eq!(e.len(), 4);
+        for e in &e[..] {
             assert_matches!(e, DescriptorError::Type {
                 expected: DescriptorType::Truthy,
                 actual: Span(_, DescriptorType::County, _)
@@ -37,9 +36,10 @@ fn test_expr() {
     });
 
     let parser = |input| expr::<RuleBodyCounty>(input, input);
-    assert_matches!(parser("1 ; 2, 4 ; 3 "), Ok((" ", RuleBodyCounty::Max(_))));
-    assert_matches!(parser("true ; false, true ; ool "), Err(NomErr::Failure(e)) => {
-        for e in &e.custom()[..] {
+    assert_matches!(parser("1 ; 2, 4 ; 3 "), Ok((" ", Ok(RuleBodyCounty::Max(_)))));
+    assert_matches!(parser("true ; false, true ; ool "), Ok((" ", Err(e))) => {
+        assert_eq!(e.len(), 4);
+        for e in &e[..] {
             assert_matches!(e, DescriptorError::Type {
                 expected: DescriptorType::County,
                 actual: Span(_, DescriptorType::Truthy, _)
@@ -53,10 +53,10 @@ fn test_and() {
     let parser = |input| and::<RuleBodyTruthy>(input, input);
     assert_matches!(
         parser("true , false , ool "),
-        Ok((" ", RuleBodyTruthy::And(_)))
+        Ok((" ", Ok(RuleBodyTruthy::And(_))))
     );
-    assert_matches!(parser("1 , 2 , 3 "), Err(NomErr::Failure(e)) => {
-        for e in &e.custom()[..] {
+    assert_matches!(parser("1 , 2 , 3 "), Ok((" ", Err(e))) => {
+        for e in &e[..] {
             assert_matches!(e, DescriptorError::Type {
                 expected: DescriptorType::Truthy,
                 actual: Span(_, DescriptorType::County, _)
@@ -65,9 +65,9 @@ fn test_and() {
     });
 
     let parser = |input| and::<RuleBodyCounty>(input, input);
-    assert_matches!(parser("1 , 2 , 3 "), Ok((" ", RuleBodyCounty::Min(_))));
-    assert_matches!(parser("true , false , ool "), Err(NomErr::Failure(e)) => {
-        for e in &e.custom()[..] {
+    assert_matches!(parser("1 , 2 , 3 "), Ok((" ", Ok(RuleBodyCounty::Min(_)))));
+    assert_matches!(parser("true , false , ool "), Ok((" ", Err(e))) => {
+        for e in &e[..] {
             assert_matches!(e, DescriptorError::Type {
                 expected: DescriptorType::County,
                 actual: Span(_, DescriptorType::Truthy, _)
@@ -79,17 +79,17 @@ fn test_and() {
 #[test]
 fn test_cmp() {
     let parser = |input| compare::<RuleBody>(input, input);
-    assert_matches!(parser("true "), Ok((" ", RuleBody::Truthy(_))));
+    assert_matches!(parser("true "), Ok((" ", Ok(RuleBody::Truthy(_)))));
     assert_matches!(
         parser("2 >= 3 "),
-        Ok((" ", RuleBody::Truthy(RuleBodyTruthy::Compare(..))))
+        Ok((" ", Ok(RuleBody::Truthy(RuleBodyTruthy::Compare(..)))))
     );
     assert_matches!(
         parser("2 * 2 >= 3 "),
-        Ok((" ", RuleBody::Truthy(RuleBodyTruthy::Compare(..))))
+        Ok((" ", Ok(RuleBody::Truthy(RuleBodyTruthy::Compare(..)))))
     );
-    assert_matches!(parser("true >= 2"), Err(NomErr::Failure(p)) => {
-        assert_matches!(&p.custom()[..], &[DescriptorError::Type {
+    assert_matches!(parser("true >= 2"), Ok(("", Err(e))) => {
+        assert_matches!(&e[..], &[DescriptorError::Type {
             expected: DescriptorType::County,
             actual: Span(_, DescriptorType::Truthy, _)
         }]);
@@ -99,23 +99,23 @@ fn test_cmp() {
 #[test]
 fn test_comb() {
     let parser = |input| comb_start::<RuleBody>(input, input);
-    assert_matches!(parser("true "), Ok((" ", RuleBody::Truthy(_))));
+    assert_matches!(parser("true "), Ok((" ", Ok(RuleBody::Truthy(_)))));
     assert_matches!(
         parser("2 * 2 "),
-        Ok((" ", RuleBody::County(RuleBodyCounty::LinearComb(_))))
+        Ok((" ", Ok(RuleBody::County(RuleBodyCounty::LinearComb(_)))))
     );
     assert_matches!(
         parser("2 + 2 "),
-        Ok((" ", RuleBody::County(RuleBodyCounty::LinearComb(_))))
+        Ok((" ", Ok(RuleBody::County(RuleBodyCounty::LinearComb(_)))))
     );
-    assert_matches!(parser("true * 2"), Err(NomErr::Failure(p)) => {
-        assert_matches!(&p.custom()[..], &[DescriptorError::Type {
+    assert_matches!(parser("true * 2"), Ok(("", Err(e))) => {
+        assert_matches!(&e[..], &[DescriptorError::Type {
             expected: DescriptorType::County,
             actual: Span(_, DescriptorType::Truthy, _)
         }]);
     });
-    assert_matches!(parser("true + 2"), Err(NomErr::Failure(p)) => {
-        assert_matches!(&p.custom()[..], &[DescriptorError::Type {
+    assert_matches!(parser("true + 2"), Ok(("", Err(e))) => {
+        assert_matches!(&e[..], &[DescriptorError::Type {
             expected: DescriptorType::County,
             actual: Span(_, DescriptorType::Truthy, _)
         }]);
@@ -126,39 +126,39 @@ fn test_comb() {
 fn test_item() {
     // Untyped
     let parser = |input| item::<RuleBody>(input, input);
-    assert_matches!(parser("ref() "), Ok((" ", RuleBody::Reference(_))));
+    assert_matches!(parser("ref() "), Ok((" ", Ok(RuleBody::Reference(_)))));
     assert_matches!(
         parser("12 "),
-        Ok((" ", RuleBody::County(RuleBodyCounty::Constant(12))))
+        Ok((" ", Ok(RuleBody::County(RuleBodyCounty::Constant(12)))))
     );
-    assert_matches!(parser("true "), Ok((" ", RuleBody::Truthy(_))));
+    assert_matches!(parser("true "), Ok((" ", Ok(RuleBody::Truthy(_)))));
     assert_matches!(
         parser("? vAlpha <- rel - gB (true) "),
-        Ok((" ", RuleBody::Truthy(_)))
+        Ok((" ", Ok(RuleBody::Truthy(_))))
     );
     assert_matches!(
         parser("+ vAlpha <- rel - gB (true) "),
-        Ok((" ", RuleBody::County(_)))
+        Ok((" ", Ok(RuleBody::County(_))))
     );
-    assert_matches!(parser("?[~vA] "), Ok((" ", RuleBody::Truthy(_))));
+    assert_matches!(parser("?[~vA] "), Ok((" ", Ok(RuleBody::Truthy(_)))));
     assert_matches!(
         parser("( false ; ool ; true ) "),
-        Ok((" ", RuleBody::Or(_)))
+        Ok((" ", Ok(RuleBody::Or(_))))
     );
 
     // Truthy
     let parser = |input| item::<RuleBodyTruthy>(input, input);
-    assert_matches!(parser("ref() "), Ok((" ", RuleBodyTruthy::Reference(_))));
+    assert_matches!(parser("ref() "), Ok((" ", Ok(RuleBodyTruthy::Reference(_)))));
     assert_matches!(
         parser("true "),
-        Ok((" ", RuleBodyTruthy::Constant(Oolean::True)))
+        Ok((" ", Ok(RuleBodyTruthy::Constant(Oolean::True))))
     );
     assert_matches!(
         parser("( false ; ool ; true ) "),
-        Ok((" ", RuleBodyTruthy::Or(_)))
+        Ok((" ", Ok(RuleBodyTruthy::Or(_))))
     );
-    assert_matches!(parser("12 "), Err(NomErr::Failure(e)) => {
-        assert_matches!(&e.custom()[..], [DescriptorError::Type {
+    assert_matches!(parser("12 "), Ok((" ", Err(e))) => {
+        assert_matches!(&e[..], [DescriptorError::Type {
             expected: DescriptorType::Truthy,
             actual: Span(_, DescriptorType::County, _)
         }]);
@@ -166,10 +166,10 @@ fn test_item() {
 
     // County
     let parser = |input| item::<RuleBodyCounty>(input, input);
-    assert_matches!(parser("ref() "), Ok((" ", RuleBodyCounty::Reference(_))));
-    assert_matches!(parser("12 "), Ok((" ", RuleBodyCounty::Constant(12))));
-    assert_matches!(parser("true "), Err(NomErr::Failure(e)) => {
-        assert_matches!(&e.custom()[..], [DescriptorError::Type {
+    assert_matches!(parser("ref() "), Ok((" ", Ok(RuleBodyCounty::Reference(_)))));
+    assert_matches!(parser("12 "), Ok((" ", Ok(RuleBodyCounty::Constant(12)))));
+    assert_matches!(parser("true "), Ok((" ", Err(e))) => {
+        assert_matches!(&e[..], [DescriptorError::Type {
             expected: DescriptorType::County,
             actual: Span(_, DescriptorType::Truthy, _)
         }]);
@@ -182,15 +182,15 @@ fn test_exists() {
 
     assert_matches!(
         parser("? vAlpha <- rel - gB (true) "),
-        Ok((" ", RuleBodyTruthy::Exists(..)))
+        Ok((" ", Ok(RuleBodyTruthy::Exists(..))))
     );
     assert_matches!(
         parser("∃ vAlpha <- rel - gB (true) "),
-        Ok((" ", RuleBodyTruthy::Exists(..)))
+        Ok((" ", Ok(RuleBodyTruthy::Exists(..))))
     );
     assert!(parser("? Alpha <- rel - gB (true) ").is_err());
-    assert_matches!(parser("? vAlpha - rel -> gB (3) "), Err(NomErr::Failure(e)) => {
-        assert_matches!(&e.custom()[..], [DescriptorError::Type {
+    assert_matches!(parser("? vAlpha - rel -> gB (3) "), Ok((" ", Err(e))) => {
+        assert_matches!(&e[..], [DescriptorError::Type {
             expected: DescriptorType::Truthy,
             actual: Span(_, DescriptorType::County, _)
         }]);
@@ -203,11 +203,11 @@ fn test_count() {
 
     assert_matches!(
         parser("+ vAlpha <- rel - gB (true) "),
-        Ok((" ", RuleBodyCounty::Count(..)))
+        Ok((" ", Ok(RuleBodyCounty::Count(..))))
     );
     assert!(parser("+ Alpha <- rel - gB (true) ").is_err());
-    assert_matches!(parser("+ vAlpha - rel -> gB (3) "), Err(NomErr::Failure(e)) => {
-        assert_matches!(&e.custom()[..], [DescriptorError::Type {
+    assert_matches!(parser("+ vAlpha - rel -> gB (3) "), Ok((" ", Err(e))) => {
+        assert_matches!(&e[..], [DescriptorError::Type {
             expected: DescriptorType::Truthy,
             actual: Span(_, DescriptorType::County, _)
         }]);
@@ -222,10 +222,10 @@ fn test_relation() {
         parser("<- name - "),
         Ok((
             " ",
-            Relation {
+            Ok(Relation {
                 left_to_right: false,
                 name: Span(_, "name", _)
-            }
+            })
         ))
     );
 
@@ -233,10 +233,10 @@ fn test_relation() {
         parser("-Name-> "),
         Ok((
             " ",
-            Relation {
+            Ok(Relation {
                 left_to_right: true,
                 name: Span(_, "Name", _)
-            }
+            })
         ))
     );
 }
@@ -247,11 +247,11 @@ fn test_state() {
 
     assert_matches!(
         parser("?[ ~vA ] "),
-        Ok((" ", RuleBodyTruthy::CheckPrior(_)))
+        Ok((" ", Ok(RuleBodyTruthy::CheckPrior(_))))
     );
     assert_matches!(
         parser("![ ~vA ] "),
-        Ok((" ", RuleBodyTruthy::CheckPosterior(_)))
+        Ok((" ", Ok(RuleBodyTruthy::CheckPosterior(_))))
     );
 }
 
@@ -263,34 +263,34 @@ fn test_access() {
 
 #[test]
 fn test_oolean() {
-    assert_eq!(oolean("false"), Ok(("", Oolean::False)));
-    assert_eq!(oolean("true"), Ok(("", Oolean::True)));
-    assert_eq!(oolean("ool"), Ok(("", Oolean::Ool)));
+    assert_eq!(oolean("false"), Ok(("", Ok(Oolean::False))));
+    assert_eq!(oolean("true"), Ok(("", Ok(Oolean::True))));
+    assert_eq!(oolean("ool"), Ok(("", Ok(Oolean::Ool))));
     assert!(oolean("falsee").is_err())
 }
 
 #[test]
 fn test_state_body() {
-    assert_matches!(state_body("¬vAr"), Ok(("", StateBody::NotSet(_))));
-    assert_matches!(state_body("~vAr"), Ok(("", StateBody::NotSet(_))));
-    assert_matches!(state_body("vAr"), Ok(("", StateBody::Set(_))));
+    assert_matches!(state_body("¬vAr"), Ok(("", Ok(StateBody::NotSet(_)))));
+    assert_matches!(state_body("~vAr"), Ok(("", Ok(StateBody::NotSet(_)))));
+    assert_matches!(state_body("vAr"), Ok(("", Ok(StateBody::Set(_)))));
 }
 
 #[test]
 fn test_reference() {
     let parser = |input| reference(input, input);
 
-    assert_matches!(parser("ref ( ) "), Ok((" ", Reference {
+    assert_matches!(parser("ref ( ) "), Ok((" ", Ok(Reference {
         keyword: Span(_, "ref", _),
         values
-    })) => {
+    }))) => {
         assert!(values.is_empty());
     });
 
-    assert_matches!(parser("r ( gA , vB, C.D ) "), Ok((" ", Reference {
+    assert_matches!(parser("r ( gA , vB, C.D ) "), Ok((" ", Ok(Reference {
         keyword: Span(_, "r", _),
         values
-    })) => {
+    }))) => {
         assert_matches!(&values[..], [
             Span(_, Value::Const(FullIdent::Global { .. }), _),
             Span(_, Value::Var(Ident::Normal(_)), _),
@@ -303,9 +303,9 @@ fn test_reference() {
 fn test_value() {
     assert_matches!(
         value_name("vVariable"),
-        Ok(("", Value::Var(Ident::Normal("Variable"))))
+        Ok(("", Ok(Value::Var(Ident::Normal("Variable")))))
     );
-    assert_matches!(value_name("\"const\""), Ok(("", Value::Const(_))));
+    assert_matches!(value_name("\"const\""), Ok(("", Ok(Value::Const(_)))));
     assert!(value_name("keyword").is_err())
 }
 

@@ -1,10 +1,8 @@
 use assert_matches::assert_matches;
 use codespan_reporting::diagnostic::Diagnostic;
-use nom::{branch::alt, bytes::complete::tag, Err as NomErr};
+use nom::{branch::alt, bytes::complete::tag, Err as NomErr, combinator::map_res, Parser};
 
-use crate::common::error::cut_custom;
-
-use super::error::{many0_accumulate, recoverable, throw, CommonError, RandoError};
+use super::error::{many0_accumulate, CommonError, RandoError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum TestParseError<'a> {
@@ -16,48 +14,42 @@ enum TestParseError<'a> {
 #[test]
 fn test_accumulate() {
     let mut parser = many0_accumulate(alt((
-        tag("a"),
-        cut_custom(throw(tag("b"), |_| TestParseError::B)),
-        recoverable(cut_custom(throw(tag("c"), |_| TestParseError::C))),
+        tag("a").map(Ok),
+        map_res(tag("b"), |_| Err(TestParseError::B)),
+        tag("c").map(|_| Err(vec![TestParseError::C])),
     )));
 
     let input = "aaaa";
-    assert_eq!(parser(input), Ok(("", vec!["a"; 4])));
+    assert_eq!(parser(input), Ok(("", Ok(vec!["a"; 4]))));
 
     let input = "aabba";
     assert_matches!(parser(input), Err(NomErr::Failure(e)) => {
-        assert!(!e.recoverable());
         assert_eq!(e.custom(), &[TestParseError::B]);
-        assert_eq!(e.remaining(), "ba")
     });
 
     let input = "aacc";
-    assert_matches!(parser(input), Err(NomErr::Failure(e)) => {
-        assert!(e.recoverable());
-        assert_eq!(e.custom(), &[TestParseError::C, TestParseError::C]);
-        assert_eq!(e.remaining(), "");
+    assert_matches!(parser(input), Ok(("", Err(e))) => {
+        assert_eq!(&e[..], &[TestParseError::C, TestParseError::C]);
     });
 
     let input = "aacbca";
     assert_matches!(parser(input), Err(NomErr::Failure(e)) => {
-        assert!(!e.recoverable());
-        assert_eq!(e.custom(), &[TestParseError::C, TestParseError::B]);
-        assert_eq!(e.remaining(), "ca");
+        assert_matches!(e.custom(), &[.., TestParseError::B]);
     });
 }
 
 #[test]
 fn test_many0_accumulate() {
-    let mut parser = many0_accumulate::<_, TestParseError, _>(tag("a"));
+    let mut parser = many0_accumulate::<_, TestParseError, _>(tag("a").map(Ok));
 
     let input = "aaaa";
-    assert_eq!(parser(input), Ok(("", vec!["a"; 4])));
+    assert_eq!(parser(input), Ok(("", Ok(vec!["a"; 4]))));
 
     let input = "aaba";
-    assert_eq!(parser(input), Ok(("ba", vec!["a"; 2])));
+    assert_eq!(parser(input), Ok(("ba", Ok(vec!["a"; 2]))));
 
     let input = "baaa";
-    assert_eq!(parser(input), Ok(("baaa", vec![])));
+    assert_eq!(parser(input), Ok(("baaa", Ok(vec![]))));
 }
 
 impl<'a> RandoError<'a> for TestParseError<'a> {

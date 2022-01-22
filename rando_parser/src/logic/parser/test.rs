@@ -27,7 +27,7 @@ fn test_logic_sugar() {
     let logic = parser::logic_sugar(input, input);
     assert_matches!(
         logic,
-        Ok(("", l)) => {
+        Ok(("", Ok(l))) => {
             assert_eq!(l.children.len(), 2);
             assert_matches!(l.header, ItemHeader::Node { keyword: Span(0, "or", 17), .. })
         }
@@ -37,7 +37,7 @@ fn test_logic_sugar() {
     let logic = parser::logic_sugar(input, input);
     assert_matches!(
         logic,
-        Ok(("", l)) => {
+        Ok(("", Ok(l))) => {
             assert_eq!(l.children.len(), 3);
             assert_matches!(l.header, ItemHeader::Node { keyword: Span(0, "and", 37), .. })
         }
@@ -45,7 +45,7 @@ fn test_logic_sugar() {
 
     let input = "(desc A & desc B | desc C)";
     let logic = parser::logic_sugar(input, input);
-    assert_matches!(logic, Err(_));
+    assert_matches!(logic, Ok(("", Err(_))));
 }
 
 #[test]
@@ -56,11 +56,11 @@ fn test_node_header() {
         header,
         Ok((
             "",
-            ItemHeader::Node {
+            Ok(ItemHeader::Node {
                 append: true,
                 keyword: Span(0, "node", 4),
                 ..
-            }
+            })
         ))
     );
 
@@ -70,11 +70,11 @@ fn test_node_header() {
         header,
         Ok((
             "",
-            ItemHeader::Node {
+            Ok(ItemHeader::Node {
                 append: false,
                 keyword: Span(0, "and", 3),
                 idents: Vec::new()
-            }
+            })
         ))
     );
 
@@ -84,11 +84,11 @@ fn test_node_header() {
         header,
         Ok((
             "",
-            ItemHeader::Node {
+            Ok(ItemHeader::Node {
                 append: false,
                 keyword: Span(0, "foo", 3),
                 ..
-            }
+            })
         ))
     );
 }
@@ -101,11 +101,11 @@ fn test_edge_header() {
         header,
         Ok((
             "",
-            ItemHeader::Edge {
+            Ok(ItemHeader::Edge {
                 left: Span(0, Ident::Normal("A"), 1),
                 arrow: Span(9, Arrow::Right, 11),
                 right: Span(12, Ident::Normal("B"), 13)
-            }
+            })
         ))
     );
 }
@@ -113,13 +113,13 @@ fn test_edge_header() {
 #[test]
 fn test_arrow() {
     let arrow = parser::arrow("<-");
-    assert_eq!(arrow, Ok(("", Arrow::Left)));
+    assert_eq!(arrow, Ok(("", Ok(Arrow::Left))));
 
     let arrow = parser::arrow("->");
-    assert_eq!(arrow, Ok(("", Arrow::Right)));
+    assert_eq!(arrow, Ok(("", Ok(Arrow::Right))));
 
     let arrow = parser::arrow("<->");
-    assert_eq!(arrow, Ok(("", Arrow::Both)));
+    assert_eq!(arrow, Ok(("", Ok(Arrow::Both))));
 
     let arrow = parser::arrow("-");
     assert_matches!(arrow, Err(_));
@@ -128,14 +128,14 @@ fn test_arrow() {
 #[test]
 fn test_comment_line_end() {
     let line = parser::comment_line_end("     \t\n");
-    assert_eq!(line, Ok(("", None)));
+    assert_eq!(line, Ok(("", Ok(None))));
 
     let line = parser::comment_line_end("     \t#Comment\n");
-    assert_eq!(line, Ok(("", Some("Comment"))));
+    assert_eq!(line, Ok(("", Ok(Some("Comment")))));
 
     let line = parser::comment_line_end("     apple\n");
     assert_matches!(line, Err(_));
 
     let line = parser::comment_line_end("     \t");
-    assert_eq!(line, Ok(("", None)));
+    assert_eq!(line, Ok(("", Ok(None))));
 }
