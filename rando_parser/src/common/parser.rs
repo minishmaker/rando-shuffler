@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alphanumeric1, char, multispace0, space0},
+    character::complete::{alphanumeric1, char, space0},
     combinator::{consumed, map_res, recognize},
     error::{ErrorKind, FromExternalError, ParseError},
     multi::{many0, separated_list1},
@@ -79,17 +79,6 @@ pub fn asciiupper1<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, 
 
 pub fn escaped_ident<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str, &str, E> {
     delimited(char('"'), is_not("\"\r\n"), char('"'))(input)
-}
-
-/// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
-/// trailing whitespace, returning the output of `inner`.
-pub fn ws<'a: 'b, 'b, F: 'b, O, E: ParseError<&'a str>>(
-    inner: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
-where
-    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
-{
-    delimited(multispace0, inner, multispace0)
 }
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and

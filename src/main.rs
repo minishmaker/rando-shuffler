@@ -1,8 +1,9 @@
+#![allow(unused_imports)]
+
 use codespan_reporting::files::{self, SimpleFile};
 use codespan_reporting::term::{self, Config};
 use petgraph::dot::Dot;
-use rando_core::graph;
-use rando_parser::logic::ast::ScopeChild;
+use petgraph::graph::DiGraph;
 use rando_parser::logic::LogicError;
 use regex::Regex;
 use std::collections::HashMap;
@@ -10,7 +11,11 @@ use std::env;
 use std::fs::File;
 use std::io::{self, Read, Write};
 
-fn main() -> io::Result<()> {
+fn main() {
+
+}
+
+/*fn main() -> io::Result<()> {
     let path = env::args()
         .skip(1)
         .next()
@@ -37,20 +42,21 @@ fn main() -> io::Result<()> {
     };
 
     let mut errored = false;
+    let mut graph = DiGraph::new();
     for area in tree {
         if let ScopeChild::Scope(rooms) = area.children {
             for room in rooms {
-                println!("Room {}", room.ident.1);
-                if let ScopeChild::Graph(graph) = room.children {
-                    let graph = graph::make_graph(graph);
-                    if let Ok(graph) = graph {
-                        let dot = Dot::new(&graph);
-                        let graph_string = format!("{}", dot);
-                        println!("{}", concentrate_edges(graph_string));
-                    } else {
+                if let ScopeChild::Graph(items) = room.children {
+                    let graph = graph::add_to_graph(&mut graph, items);
+                    if let Err(errors) = graph {
                         errored = true;
-                        for error in graph.unwrap_err() {
-                            eprintln!("{}", error);
+                        use term::termcolor::{ColorChoice, StandardStream};
+                        let file = SimpleFile::new(&path, &input);
+                        let mut stdout = StandardStream::stdout(ColorChoice::Auto);
+                        for error in errors {
+                            let diagnostic = GraphError::diagnostic(&error, &());
+                            term::emit(&mut stdout, &Config::default(), &file, &diagnostic)
+                                .unwrap();
                         }
                     }
                 }
@@ -62,6 +68,10 @@ fn main() -> io::Result<()> {
     if errored {
         std::process::exit(1)
     }
+
+    let dot = Dot::new(&graph);
+    let graph_string = format!("{}", dot);
+    println!("{}", concentrate_edges(graph_string));
 
     Ok(())
 }
@@ -105,3 +115,4 @@ fn concentrate_edges(graph: String) -> String {
 
     output
 }
+*/

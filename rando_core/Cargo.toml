@@ -7,5 +7,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rando_parser = { path = "../rando_parser" }
 petgraph = "0.5.1"
+codespan-reporting = "0.11.1"
