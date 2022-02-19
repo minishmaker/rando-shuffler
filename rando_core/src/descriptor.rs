@@ -1,63 +1,60 @@
-use std::{hash::Hash, collections::{HashMap, HashSet}};
+use crate::{Ntgr, Oolean, Relation};
 
-use crate::{algebra::{Sphery, Truthy, County}, shuffles::Shuffle};
-
-pub trait Descriptor<V: Hash> {
+pub trait Descriptor<V> {
     type Truthy;
     type County;
-    fn eval<R, T, C>(v: &[V], t : T, c : C) -> R
+    fn eval<R, T, C>(&self, v: &[V], t: T, c: C) -> R
     where
-        T : Fn(Self::Truthy) -> R,
-        C : Fn(Self::County) -> R;
-    fn eval_truthy<R, C, Ref, A, Comp, Ex, Conj, Disj, Prio, Post>(body : Self::Truthy, c : C, r : Ref, a : A, comp : Comp, ex : Ex, prio : Prio, post : Post) -> R
-    where
-        C : Fn(Oolean) -> R,
-        Ref : Fn(&str, &[V]) -> R,
-        A : Fn(&str, &[V]) -> R,
-        Comp : Fn(&Self::County, Ntgr) -> R,
-        Ex : Fn(Relation<'_>, &V, &dyn Fn(&V) -> Self::Truthy) -> R,
-        Conj : Fn(&Self::Truthy, &Self::Truthy) -> R,
-        Disj : Fn(&Self::Truthy, &Self::Truthy) -> R,
-        Prio : Fn(&[(Bool, V)]) -> R,
-        Post : Fn(&[(Bool, V)]) -> R;
-    fn eval_county<R, C, Ref, Comb, Min, Max, Ct>(body: Self::County, c: C, r: Ref, comb: Comb, min: Min, max: Max, ct: Ct) -> R
-    where
-        C: Fn(Oolean) -> R,
-        Ref: Fn(&str, &[V]) -> R,
-        A: Fn(&str, &[V]) -> R,
-        Comb: Fn(&Self::County, u32, &Self::County, u32) -> R,
-        Min: Fn(&Self::County, &Self::County) -> R,
-        Max: Fn(&Self::County, &Self::County) -> R,
-        Ct: Fn(Relation<'_>, &V, &dyn Fn(&V) -> Self::County) -> R;
+        T: Fn(&Self::Truthy) -> R,
+        C: Fn(&Self::County) -> R;
+    fn eval_truthy<R>(
+        body: &Self::Truthy,
+        c: impl Fn(Oolean) -> R,
+        r: impl Fn(&str, &[V]) -> R,
+        a: impl Fn(&str, &[V]) -> R,
+        comp: impl Fn(&Self::County, Ntgr) -> R,
+        ex: impl Fn(Relation<'_>, &V, &dyn Fn(&V) -> Self::Truthy) -> R,
+        conj: impl Fn(&Self::Truthy, &Self::Truthy) -> R,
+        disj: impl Fn(&Self::Truthy, &Self::Truthy) -> R,
+        prio: impl Fn(&[(bool, V)]) -> R,
+        post: impl Fn(&[(bool, V)]) -> R,
+    ) -> R;
+
+    fn eval_county<R>(
+        body: &Self::County,
+        c: impl Fn(Ntgr) -> R,
+        r: impl Fn(&str, &[V]) -> R,
+        comb: impl Fn(&Self::County, Ntgr, &Self::County) -> R,
+        min: impl Fn(&Self::County, &Self::County) -> R,
+        max: impl Fn(&Self::County, &Self::County) -> R,
+        ct: impl Fn(Relation<'_>, &V, &dyn Fn(&V) -> Self::County) -> R,
+    ) -> R;
 }
 
-trait Logic<N, V> {}
+/// Note: The concrete return types for these methods are unstable, pending GAT and existential types.
+/// It's only stable to use these as `impl Iterator + 'a`.
+pub trait Logic<V> {
+    type Node: Clone;
+    type Descriptor: Descriptor<V>;
 
-// TODO: move this to an appropriate place
-trait Database<'a, D, L, LN, V, T, C, R>
-where
-    D: Descriptor<V>,
-    L: Logic<LN, V> + Hash,
-    LN: Hash,
-    V: Hash,
-    T: Truthy + Sphery + Statey,
-    C: County<T> + Sphery + Statey,
-    R: Shuffle<V, V>
-{
-    type Err;
+    fn list_nodes<'a>(&'a self) -> Box<dyn Iterator<Item = Self::Node> + 'a>;
+    fn edges<'a>(
+        &'a self,
+        source: &Self::Node,
+    ) -> Box<dyn Iterator<Item = Edge<'a, Self::Descriptor, Self::Node>> + 'a>;
+    fn access_nodes<'a>(
+        &'a self,
+        name: &str,
+        values: &[V],
+    ) -> Box<dyn Iterator<Item = Self::Node> + 'a>;
+}
 
-    fn initialize(
-        shuffles: HashMap<&'a str,R>,
-        logic : HashSet<L>,
-        descriptors_keysy : HashMap<&'a str, (&'a str, &'a str)>,
-        descriptors_truthy : HashMap<&'a str, Vec<D>>,
-        descriptors_county : HashMap<&'a str, Vec<D>>
-    ) -> Self;
-    
-    fn query_descriptor_truthy(&self, name: &str, values : &[V]) -> Result<T, Self::Err>;
-    fn query_descriptor_county(&self, name: &str, values : &[V]) -> Result<C, Self::Err>;
-    fn query_logic_node(&self, ln : &LN) -> Result<T, Self::Err>;
-    fn query_access(&self, name: &str, values: &[V]) -> Result<T, Self::Err>;
+pub struct Edge<'a, D, N> {
+    pub descriptor: &'a D,
+    pub ty: EdgeTy<N>,
+}
 
-    fn mod_shuffle(&mut self, delta : &R::Delta);
+pub enum EdgeTy<N> {
+    FromNode(N),
+    FromTrue,
 }

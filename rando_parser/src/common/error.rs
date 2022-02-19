@@ -1,4 +1,4 @@
-use std::{ops::Range, marker::PhantomData, convert::identity};
+use std::{convert::identity, marker::PhantomData, ops::Range};
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use nom::{
@@ -6,8 +6,9 @@ use nom::{
     error::{
         ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError as NomParseError,
     },
+    multi::fold_many0,
     sequence::pair,
-    Err as NomErr, IResult, Parser, multi::fold_many0,
+    Err as NomErr, IResult, Parser,
 };
 
 use super::{
@@ -182,7 +183,9 @@ impl<'a, E: RandoError<'a>> From<Vec<E>> for ParseError<'a, E> {
     }
 }
 
-pub struct MapOk<P, F, T, U>(P, F, PhantomData<T>, PhantomData<U>) where F: FnMut(T) -> U;
+pub struct MapOk<P, F, T, U>(P, F, PhantomData<T>, PhantomData<U>)
+where
+    F: FnMut(T) -> U;
 
 impl<'a, P, F, T, U, E> Parser<&'a str, Result<U, Vec<E>>, ParseError<'a, E>> for MapOk<P, F, T, U>
 where
@@ -191,16 +194,17 @@ where
     F: FnMut(T) -> U,
 {
     fn parse(&mut self, input: &'a str) -> IResult<&'a str, Result<U, Vec<E>>, ParseError<'a, E>> {
-        self.0.parse(input)
-            .map(|(i, r)| (i, r.map(&mut self.1)))
+        self.0.parse(input).map(|(i, r)| (i, r.map(&mut self.1)))
     }
 }
 
-pub trait ParseExt<'a, T, E: RandoError<'a>>: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>> {
+pub trait ParseExt<'a, T, E: RandoError<'a>>:
+    Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>
+{
     fn map_ok<F, U>(self, f: F) -> MapOk<Self, F, T, U>
     where
         Self: Sized,
-        F: FnMut(T) -> U
+        F: FnMut(T) -> U,
     {
         MapOk(self, f, PhantomData, PhantomData)
     }
@@ -235,13 +239,16 @@ pub fn accumulate_errors<'a, A, T, B, E>(
     }
 }
 
-pub fn merge_tuple<T, U, E>(first: Result<T, Vec<E>>, second: Result<U, Vec<E>>) -> Result<(T, U), Vec<E>> {
+pub fn merge_tuple<T, U, E>(
+    first: Result<T, Vec<E>>,
+    second: Result<U, Vec<E>>,
+) -> Result<(T, U), Vec<E>> {
     match (first, second) {
         (Ok(t), Ok(u)) => Ok((t, u)),
         (Err(mut t), Err(mut u)) => {
             t.append(&mut u);
             Err(t)
-        },
+        }
         (Err(e), _) | (_, Err(e)) => Err(e),
     }
 }
@@ -267,14 +274,7 @@ where
     E: RandoError<'a>,
     F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
 {
-    move |i| {
-        accumulate_inner(
-            |i| f.parse(i),
-            Ok(Vec::new()),
-            vec_merge,
-            i,
-        )
-    }
+    move |i| accumulate_inner(|i| f.parse(i), Ok(Vec::new()), vec_merge, i)
 }
 
 pub fn many1_accumulate<'a, T, E, F>(
@@ -284,18 +284,15 @@ where
     E: RandoError<'a>,
     F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
 {
-    move |i| {
-        match f.parse(i) {
-            Err(NomErr::Error(_)) => {
-                Err(NomErr::Error(
-                    ParseError::from_error_kind(i, NomErrorKind::Many1),
-                ))
-            }
-            Err(e) => Err(e),
-            Ok((i, first)) => {
-                let acc = first.map(|f| vec![f]);
-                accumulate_inner(|i| f.parse(i), acc, vec_merge, i)
-            }
+    move |i| match f.parse(i) {
+        Err(NomErr::Error(_)) => Err(NomErr::Error(ParseError::from_error_kind(
+            i,
+            NomErrorKind::Many1,
+        ))),
+        Err(e) => Err(e),
+        Ok((i, first)) => {
+            let acc = first.map(|f| vec![f]);
+            accumulate_inner(|i| f.parse(i), acc, vec_merge, i)
         }
     }
 }
@@ -309,17 +306,15 @@ where
     F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
     G: Parser<&'a str, Result<O, Vec<E>>, ParseError<'a, E>>,
 {
-    move |i| {
-        match f.parse(i) {
-            Err(NomErr::Error(_)) => Ok((i, Ok(Vec::new()))),
-            Err(e) => Err(e),
-            Ok((i, first)) => {
-                let acc = first.map(|f| vec![f]);
-                let parser = pair(|i| sep.parse(i), |i| f.parse(i))
-                    .map(|(a, b)| merge_tuple(a, b))
-                    .map_ok(|(_, b)| b);
-                accumulate_inner(parser, acc, vec_merge, i)
-            }
+    move |i| match f.parse(i) {
+        Err(NomErr::Error(_)) => Ok((i, Ok(Vec::new()))),
+        Err(e) => Err(e),
+        Ok((i, first)) => {
+            let acc = first.map(|f| vec![f]);
+            let parser = pair(|i| sep.parse(i), |i| f.parse(i))
+                .map(|(a, b)| merge_tuple(a, b))
+                .map_ok(|(_, b)| b);
+            accumulate_inner(parser, acc, vec_merge, i)
         }
     }
 }
@@ -333,21 +328,18 @@ where
     F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
     G: Parser<&'a str, Result<O, Vec<E>>, ParseError<'a, E>>,
 {
-    move |i| {
-        match f.parse(i) {
-            Err(NomErr::Error(_)) => {
-                Err(NomErr::Error(
-                    ParseError::from_error_kind(i, NomErrorKind::SeparatedList),
-                ))
-            }
-            Err(e) => Err(e),
-            Ok((i, first)) => {
-                let acc = first.map(|f| vec![f]);
-                let parser = pair(|i| sep.parse(i), |i| f.parse(i))
-                    .map(|(a, b)| merge_tuple(a, b))
-                    .map_ok(|(_, b)| b);
-                accumulate_inner(parser, acc, vec_merge, i)
-            }
+    move |i| match f.parse(i) {
+        Err(NomErr::Error(_)) => Err(NomErr::Error(ParseError::from_error_kind(
+            i,
+            NomErrorKind::SeparatedList,
+        ))),
+        Err(e) => Err(e),
+        Ok((i, first)) => {
+            let acc = first.map(|f| vec![f]);
+            let parser = pair(|i| sep.parse(i), |i| f.parse(i))
+                .map(|(a, b)| merge_tuple(a, b))
+                .map_ok(|(_, b)| b);
+            accumulate_inner(parser, acc, vec_merge, i)
         }
     }
 }
@@ -367,9 +359,17 @@ where
     fold_many0(
         f,
         move || acc.take().unwrap(),
-        |acc, result| accumulate_errors(acc, result, &mut merge, move |mut a, mut b| {
-            a.append(&mut b);
-            a
-        }, identity)
+        |acc, result| {
+            accumulate_errors(
+                acc,
+                result,
+                &mut merge,
+                move |mut a, mut b| {
+                    a.append(&mut b);
+                    a
+                },
+                identity,
+            )
+        },
     )(i)
 }

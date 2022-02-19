@@ -10,11 +10,11 @@ use nom::{
 
 use crate::common::{
     error::{
-        many0_accumulate, many1_accumulate, separated_list1_accumulate,
-        ParseError, ParseExt, merge_tuple,
+        many0_accumulate, many1_accumulate, merge_tuple, separated_list1_accumulate, ParseError,
+        ParseExt,
     },
     parser::{full_ident, ident_part, keyword, ls, sticky},
-    span::{span, Span, span_ok},
+    span::{span, span_ok, Span},
 };
 
 use super::{
@@ -28,7 +28,8 @@ use error::LogicParseError;
 #[cfg(test)]
 mod test;
 
-type ParseResult<'a, T> = IResult<&'a str, Result<T, Vec<LogicParseError<'a>>>, ParseError<'a, LogicParseError<'a>>>;
+type ParseResult<'a, T> =
+    IResult<&'a str, Result<T, Vec<LogicParseError<'a>>>, ParseError<'a, LogicParseError<'a>>>;
 
 pub fn parse_items(full: &str) -> Result<Vec<Item>, ParseError<LogicParseError>> {
     let indent = Indent::empty();
@@ -70,15 +71,20 @@ fn block_children<'a>(
 ) -> ParseResult<'a, Vec<Item<'a>>> {
     let (input, indent) = get_indent(indent, input)?;
 
-    let error_check = space1.map(|actual| Err::<(), _>(vec![LogicParseError::WrongIndent {
-        base: indent.space,
-        actual,
-    }]));
+    let error_check = space1.map(|actual| {
+        Err::<(), _>(vec![LogicParseError::WrongIndent {
+            base: indent.space,
+            actual,
+        }])
+    });
 
-    many1_accumulate(preceded(pair(indent, opt(error_check)), alt((
-        move |input| item(indent, full, input),
-        |input| logic_sugar(full, input)
-    ))))(input)
+    many1_accumulate(preceded(
+        pair(indent, opt(error_check)),
+        alt((
+            move |input| item(indent, full, input),
+            |input| logic_sugar(full, input),
+        )),
+    ))(input)
 }
 
 fn inline_children<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Vec<Item<'a>>> {
@@ -183,7 +189,8 @@ fn arrow(input: &str) -> ParseResult<Arrow> {
             preceded(tag("<-"), opt(char('>'))).map(|r| Arrow::new(true, r.is_some()).unwrap()),
             value(Arrow::Right, tag("->")),
         )),
-    ).map(Ok)
+    )
+    .map(Ok)
     .parse(input)
 }
 
@@ -192,6 +199,7 @@ pub fn comment_line_end(input: &str) -> ParseResult<Option<&str>> {
         space0,
         opt(preceded(char('#'), not_line_ending)),
         alt((line_ending, eof)),
-    ).map(Ok)
+    )
+    .map(Ok)
     .parse(input)
 }

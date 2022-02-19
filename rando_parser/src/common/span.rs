@@ -67,7 +67,6 @@ where
     }
 }
 
-
 pub fn span_ok<'a: 'b, 'b, F: 'b, T, U, E>(
     full: &'a str,
     mut parser: F,
@@ -86,7 +85,7 @@ where
             let len = input.len() - next.len();
             Span(end - len, s, end)
         });
-        
+
         Ok((next, out))
     }
 }
