@@ -1,4 +1,4 @@
-use crate::Ntgr;
+use std::ops::{Add, Mul};
 
 /// Truthy forms a lattice
 pub trait Truthy {
@@ -31,3 +31,56 @@ pub trait County<T: Truthy>: Truthy {
 }
 
 pub trait Statey: Truthy {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Oolean {
+    False,
+    Ool,
+    True,
+}
+
+impl Oolean {
+    pub fn to_truthy<T: Truthy>(self) -> T {
+        match self {
+            Oolean::False => T::bottom(),
+            Oolean::Ool => T::ool(),
+            Oolean::True => T::top(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Ntgr {
+    Num(u32),
+    Infinity,
+}
+
+impl Ntgr {
+    pub fn to_county<T: Truthy, C: County<T>>(self, t: T) -> C {
+        C::lift(&t).scale(self)
+    }
+}
+
+impl Add for Ntgr {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        if let (Ntgr::Num(a), Ntgr::Num(b)) = (self, rhs) {
+            Ntgr::Num(a + b)
+        } else {
+            Ntgr::Infinity
+        }
+    }
+}
+
+impl Mul for Ntgr {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        if let (Ntgr::Num(a), Ntgr::Num(b)) = (self, rhs) {
+            Ntgr::Num(a * b)
+        } else {
+            Ntgr::Infinity
+        }
+    }
+}

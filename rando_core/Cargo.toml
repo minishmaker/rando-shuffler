@@ -9,3 +9,4 @@ edition = "2021"
 [dependencies]
 petgraph = "0.5.1"
 codespan-reporting = "0.11.1"
+either = "1.6.1"

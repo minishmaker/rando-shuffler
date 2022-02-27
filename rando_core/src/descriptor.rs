@@ -1,19 +1,22 @@
-use crate::{Ntgr, Oolean, Relation};
+use crate::shuffles::ShufflePattern;
+
+use super::algebra::{Ntgr, Oolean};
 
 pub trait Descriptor<V> {
     type Truthy;
     type County;
     fn eval<R, T, C>(&self, v: &[V], t: T, c: C) -> R
     where
-        T: Fn(&Self::Truthy) -> R,
-        C: Fn(&Self::County) -> R;
+        T: Fn(&Self::Truthy, &[V]) -> R,
+        C: Fn(&Self::County, &[V]) -> R;
     fn eval_truthy<R>(
         body: &Self::Truthy,
+        values: &[V],
         c: impl Fn(Oolean) -> R,
         r: impl Fn(&str, &[V]) -> R,
         a: impl Fn(&str, &[V]) -> R,
         comp: impl Fn(&Self::County, Ntgr) -> R,
-        ex: impl Fn(Relation<'_>, &V, &dyn Fn(&V) -> Self::Truthy) -> R,
+        ex: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
         conj: impl Fn(&Self::Truthy, &Self::Truthy) -> R,
         disj: impl Fn(&Self::Truthy, &Self::Truthy) -> R,
         prio: impl Fn(&[(bool, V)]) -> R,
@@ -22,12 +25,13 @@ pub trait Descriptor<V> {
 
     fn eval_county<R>(
         body: &Self::County,
+        values: &[V],
         c: impl Fn(Ntgr) -> R,
         r: impl Fn(&str, &[V]) -> R,
         comb: impl Fn(&Self::County, Ntgr, &Self::County) -> R,
         min: impl Fn(&Self::County, &Self::County) -> R,
         max: impl Fn(&Self::County, &Self::County) -> R,
-        ct: impl Fn(Relation<'_>, &V, &dyn Fn(&V) -> Self::County) -> R,
+        ct: impl Fn(&str, ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
     ) -> R;
 }
 

@@ -1,20 +1,29 @@
 use std::{
-    borrow::Cow,
+    borrow::{Borrow, Cow},
     cell::RefCell,
     collections::{HashMap, HashSet},
     hash::Hash,
+    rc::Rc,
 };
 
-use petgraph::graph::DiGraph;
+use either::Either;
 
 use crate::{
-    algebra::{County, Sphery, Statey, Truthy},
+    algebra::{County, Ntgr, Oolean, Sphery, Statey, Truthy},
     descriptor::{Descriptor, EdgeTy, Logic},
-    shuffles::Shuffle,
-    Ntgr, Oolean, Relation,
+    shuffles::{Shuffle, ShufflePattern},
 };
 
-trait Database<'a, D, L, V, T, C, R>
+use self::cache::{CacheRef, DBCache};
+use self::query::{DescriptorType, Query};
+
+mod cache;
+mod query;
+
+#[cfg(test)]
+mod test;
+
+pub trait Database<'a, D, L, V, T, C, R>
 where
     D: Descriptor<V>,
     L: Logic<V>,
@@ -38,81 +47,26 @@ where
     fn query_logic_node(&self, ln: &L::Node) -> Result<T, Self::Err>;
     fn query_access(&self, name: &str, values: &[V]) -> Result<T, Self::Err>;
 
-    fn mod_shuffle(&mut self, delta: &R::Delta);
+    fn mod_shuffle(&mut self, shuffle: &str, delta: &R::Delta) -> Result<(), Self::Err>;
 }
 
-struct DBImpl<'a, D, L, V, T, C, R>
+#[derive(Clone, Debug)]
+pub struct DBImpl<'a, D, L, V, T, C, R>
 where
     D: Descriptor<V>,
     L: Logic<V>,
     L::Node: Clone + Hash + Eq,
     V: Clone + Hash + Eq,
-    T: Clone + Truthy + Sphery + Statey,
-    C: Clone + County<T> + Sphery + Statey,
+    T: Clone + Eq + Truthy + Sphery + Statey,
+    C: Clone + Eq + County<T> + Sphery + Statey,
     R: Shuffle<V, V>,
 {
     shuffles: HashMap<&'a str, R>,
     logic: L,
-    descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
+    _descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
     descriptors_truthy: HashMap<&'a str, Vec<D>>,
     descriptors_county: HashMap<&'a str, Vec<D>>,
-    cache: DBCache<T, C, V, L::Node>,
-}
-
-struct DBCache<
-    T: Truthy + Sphery + Statey,
-    C: County<T> + Statey,
-    V: Hash + Eq + Clone,
-    LN: Hash + Eq + Clone,
-> where
-    T: Clone + Truthy + Sphery + Statey,
-    C: Clone + County<T> + Sphery + Statey,
-    V: Clone + Hash + Eq,
-    LN: Clone + Hash + Eq,
-{
-    truthy_cache: RefCell<HashMap<Query<V, LN>, T>>,
-    county_cache: RefCell<HashMap<Query<V, LN>, C>>,
-    dependencies: DiGraph<Query<V, LN>, Query<V, LN>>,
-}
-
-impl<'a, T, C, V, LN> DBCache<T, C, V, LN>
-where
-    T: Clone + Truthy + Sphery + Statey,
-    C: Clone + County<T> + Sphery + Statey,
-    V: Clone + Hash + Eq,
-    LN: Clone + Hash + Eq,
-{
-    fn query_truthy(&self, query: &Query<V, LN>) -> Option<T> {
-        self.truthy_cache.borrow().get(query).map(Clone::clone)
-    }
-
-    fn set_truthy(&self, query: Query<V, LN>, value: T) {
-        self.truthy_cache.borrow_mut().insert(query, value);
-    }
-
-    fn query_county(&self, query: &Query<V, LN>) -> Option<C> {
-        self.county_cache.borrow().get(query).map(Clone::clone)
-    }
-
-    fn set_county(&self, query: Query<V, LN>, value: C) {
-        self.county_cache.borrow_mut().insert(query, value);
-    }
-}
-
-impl<T, C, V, LN> Default for DBCache<T, C, V, LN>
-where
-    T: Clone + Truthy + Sphery + Statey,
-    C: Clone + County<T> + Sphery + Statey,
-    V: Clone + Hash + Eq,
-    LN: Clone + Hash + Eq,
-{
-    fn default() -> Self {
-        Self {
-            truthy_cache: Default::default(),
-            county_cache: Default::default(),
-            dependencies: Default::default(),
-        }
-    }
+    cache: RefCell<DBCache<'a, T, C, V, L::Node>>,
 }
 
 impl<'a, D, L, V, T, C, R> Database<'a, D, L, V, T, C, R> for DBImpl<'a, D, L, V, T, C, R>
@@ -121,8 +75,8 @@ where
     L: Logic<V>,
     L::Node: Hash + Eq + Clone,
     V: Hash + Eq + Clone,
-    T: Clone + Truthy + Sphery + Statey,
-    C: Clone + County<T> + Sphery + Statey,
+    T: Clone + Eq + Truthy + Sphery + Statey,
+    C: Clone + Eq + County<T> + Sphery + Statey,
     R: Shuffle<V, V>,
 {
     type Err = ();
@@ -130,14 +84,14 @@ where
     fn initialize(
         shuffles: HashMap<&'a str, R>,
         logic: L,
-        descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
+        _descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
         descriptors_truthy: HashMap<&'a str, Vec<D>>,
         descriptors_county: HashMap<&'a str, Vec<D>>,
     ) -> Self {
         Self {
             shuffles,
             logic,
-            descriptors_keysy,
+            _descriptors_keysy,
             descriptors_truthy,
             descriptors_county,
             cache: Default::default(),
@@ -145,35 +99,55 @@ where
     }
 
     fn query_descriptor_truthy(&self, name: &str, values: &[V]) -> Result<T, Self::Err> {
-        self.query_inner_truthy(
-            &Query::Descriptor(name.into(), values.into()),
+        self.query_inner(
+            &Query::Descriptor(name.into(), values.into(), DescriptorType::Truthy),
+            None,
             &mut HashSet::new(),
+            &mut self.cache.borrow_mut(),
         )
+        .map(|v| v.left().unwrap())
     }
 
     fn query_descriptor_county(&self, name: &str, values: &[V]) -> Result<C, Self::Err> {
-        match self.descriptors_county.get(name) {
-            Some(rules) => Ok(rules
-                .iter()
-                .map(|d| d.eval(values, |_| unreachable!(), |_| todo!()))
-                .fold(C::bottom(), |a, b| a.join(&b))),
-            None => Err(()),
-        }
+        self.query_inner(
+            &Query::Descriptor(name.into(), values.into(), DescriptorType::County),
+            None,
+            &mut HashSet::new(),
+            &mut self.cache.borrow_mut(),
+        )
+        .map(|v| v.right().unwrap())
     }
 
     fn query_logic_node(&self, ln: &L::Node) -> Result<T, Self::Err> {
-        self.query_inner_truthy(&Query::Node(ln.clone()), &mut HashSet::new())
+        self.query_inner(
+            &Query::Node(ln.clone()),
+            None,
+            &mut HashSet::new(),
+            &mut self.cache.borrow_mut(),
+        )
+        .map(|v| v.left().unwrap())
     }
 
     fn query_access(&self, name: &str, values: &[V]) -> Result<T, Self::Err> {
-        self.query_inner_truthy(
+        self.query_inner(
             &Query::Access(name.into(), values.into()),
+            None,
             &mut HashSet::new(),
+            &mut self.cache.borrow_mut(),
         )
+        .map(|v| v.left().unwrap())
     }
 
-    fn mod_shuffle(&mut self, delta: &R::Delta) {}
+    fn mod_shuffle(&mut self, shuffle: &str, delta: &R::Delta) -> Result<(), Self::Err> {
+        self.shuffles.get_mut(shuffle).ok_or(())?.modify(delta);
+
+        self.cache.borrow_mut().mod_shuffle(shuffle, delta, |n, c| {
+            self.eval_query(n, &mut HashSet::new(), c)
+        })
+    }
 }
+
+type DBImplErr = ();
 
 impl<'a, D, L, V, T, C, R> DBImpl<'a, D, L, V, T, C, R>
 where
@@ -181,240 +155,260 @@ where
     L: Logic<V>,
     L::Node: Clone + Hash + Eq,
     V: Hash + Eq + Clone,
-    T: Clone + Truthy + Sphery + Statey,
-    C: Clone + County<T> + Sphery + Statey,
+    T: Clone + Eq + Truthy + Sphery + Statey,
+    C: Clone + Eq + County<T> + Sphery + Statey,
     R: Shuffle<V, V>,
 {
-    fn query_inner_truthy(
+    fn query_inner(
         &self,
         query: &Query<V, L::Node>,
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<T, ()> {
-        // Can't depend on itself
-        if visited.contains(query) {
-            return Ok(T::bottom());
+        parent: Option<CacheRef>,
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<Either<T, C>, DBImplErr> {
+        let cache_ref = cache.register(query);
+        if let Some(parent) = parent {
+            cache.add_dependency(cache_ref, parent)
         }
-
-        match self.cache.query_truthy(query) {
-            Some(t) => Ok(t),
+        match cache.cached_value(cache_ref) {
+            Some(v) => Ok(v),
             None => {
-                visited.insert(query.clone());
-                let value = match query {
-                    Query::Descriptor(name, values) => {
-                        self.eval_descriptor_ref_truthy(&name, values, visited)
-                    }
-                    Query::Access(name, values) => self.eval_access(name, values, visited),
-                    Query::Node(node) => self.eval_node(node, visited),
-                }?;
-                let query = visited.take(query).unwrap();
-                self.cache.set_truthy(query, value.clone());
+                let value = self.eval_query(cache_ref, visited, cache)?;
+                cache.set_cache(cache_ref, value.clone());
                 Ok(value)
             }
         }
     }
 
-    fn eval_node(&self, node: &L::Node, visited: &mut HashSet<Query<V, L::Node>>) -> Result<T, ()> {
-        let mut access = T::bottom();
-        for edge in self.logic.edges(node) {
-            let edge_access =
-                self.eval_descriptor(edge.descriptor, &[], |t| Ok(t), |_| Err(()), visited)?;
+    fn eval_query(
+        &self,
+        cache_ref: CacheRef,
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<Either<T, C>, DBImplErr> {
+        visited.insert(cache_ref);
+        let query = cache.get_query(cache_ref);
+        let result = match &*query {
+            Query::Descriptor(name, values, ty) => {
+                self.eval_descriptor_ref(cache_ref, &name, values, *ty, visited, cache)
+            }
+            Query::Access(name, values) => self
+                .eval_access(cache_ref, name, values, visited, cache)
+                .map(Either::Left),
+            Query::Node(node) => self
+                .eval_node(cache_ref, node, visited, cache)
+                .map(Either::Left),
+        };
+        visited.remove(&cache_ref);
+        result
+    }
 
-            let node_access = match &edge.ty {
-                EdgeTy::FromTrue => T::top(),
-                EdgeTy::FromNode(source) => {
-                    self.query_inner_truthy(&Query::Node(source.clone()), visited)?
-                }
-            };
-
-            access = access.join(&edge_access).join(&node_access);
-        }
-
-        Ok(access.increment())
+    fn eval_node(
+        &self,
+        cache_ref: CacheRef,
+        node: &L::Node,
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<T, DBImplErr> {
+        self.logic
+            .edges(node)
+            .map(|edge| {
+                (
+                    self.eval_descriptor(cache_ref, edge.descriptor, &[], visited, cache)
+                        .and_then(|v| v.left().ok_or(())),
+                    match &edge.ty {
+                        EdgeTy::FromTrue => Ok(T::top()),
+                        EdgeTy::FromNode(source) => self
+                            .query_inner(
+                                &Query::Node(source.clone()),
+                                Some(cache_ref),
+                                visited,
+                                cache,
+                            )
+                            .and_then(|v| v.left().ok_or(())),
+                    },
+                )
+            })
+            .try_fold(T::bottom(), |a, (b, c)| {
+                b.and_then(|b| c.map(|c| a.join(&b).join(&c)))
+            })
+            .map(|t| t.increment())
     }
 
     fn eval_access(
         &self,
+        cache_ref: CacheRef,
         name: &str,
         values: &[V],
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<T, ()> {
-        let mut access = T::bottom();
-        for node in self.logic.access_nodes(name, values) {
-            access = access.join(&self.eval_node(&node, visited)?)
-        }
-
-        Ok(access.increment())
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<T, DBImplErr> {
+        self.logic
+            .access_nodes(name, values)
+            .map(|n| {
+                let query = Query::Node(n);
+                self.query_inner(&query, Some(cache_ref), visited, cache)
+                    .map(|v| v.left().unwrap())
+            })
+            .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
     }
 
-    fn eval_descriptor_ref_truthy(
+    fn eval_descriptor_ref(
         &self,
+        cache_ref: CacheRef,
         descriptor: &str,
         values: &[V],
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<T, ()> {
-        match self.descriptors_truthy.get(descriptor) {
-            Some(descriptors) => {
-                let mut value = T::bottom();
-                for descriptor in descriptors {
-                    value = value.join(&self.eval_descriptor(
-                        descriptor,
-                        values,
-                        |t| Ok(t),
-                        |_| Err(()),
-                        visited,
-                    )?);
-                }
-                Ok(value)
-            }
-            None => Err(()),
+        ty: DescriptorType,
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<Either<T, C>, DBImplErr> {
+        let descriptors = match ty {
+            DescriptorType::Truthy => self.descriptors_truthy.get(descriptor).ok_or(()),
+            DescriptorType::County => self.descriptors_county.get(descriptor).ok_or(()),
+        }?;
+
+        let values = descriptors
+            .into_iter()
+            .map(|d| self.eval_descriptor(cache_ref, d, values, visited, cache));
+
+        match ty {
+            DescriptorType::Truthy => values
+                .map(|v| v.and_then(|v| v.left().ok_or(())))
+                .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
+                .map(Either::Left),
+            DescriptorType::County => values
+                .map(|v| v.and_then(|v| v.right().ok_or(())))
+                .try_fold(C::bottom(), |a, b| b.map(|b| a.join(&b)))
+                .map(Either::Right),
         }
     }
 
-    fn eval_descriptor<D1: Descriptor<V>, R1>(
+    fn eval_descriptor<D1: Descriptor<V>>(
         &self,
+        cache_ref: CacheRef,
         descriptor: &D1,
         values: &[V],
-        truthy: impl Fn(T) -> Result<R1, ()>,
-        county: impl Fn(C) -> Result<R1, ()>,
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<R1, ()> {
-        let visited = RefCell::new(visited);
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<Either<T, C>, DBImplErr> {
+        let refs = RefCell::new((visited, cache));
         descriptor.eval(
-            values, 
-            |t| self.eval_descriptor_truthy::<D1>(t, &mut visited.borrow_mut())
-                .and_then(&truthy),
-            |c| self.eval_descriptor_county::<D1>(c, &mut visited.borrow_mut())
-                .and_then(&county)
+            values,
+            |t, v| {
+                let (visited, cache) = &mut *refs.borrow_mut();
+                self.eval_descriptor_truthy::<D1>(cache_ref, t, v, visited, cache)
+                    .map(Either::Left)
+            },
+            |c, v| {
+                let (visited, cache) = &mut *refs.borrow_mut();
+                self.eval_descriptor_county::<D1>(cache_ref, c, v, visited, cache)
+                    .map(Either::Right)
+            },
         )
     }
 
     fn eval_descriptor_truthy<D1: Descriptor<V>>(
         &self,
+        cache_ref: CacheRef,
         t: &D1::Truthy,
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<T, ()> {
-        let visited = RefCell::new(visited);
-        let oolean = |ool| match ool {
-            Oolean::False => Ok(T::bottom()),
-            Oolean::Ool => Ok(T::ool()),
-            Oolean::True => Ok(T::top()),
-        };
+        v: &[V],
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<T, DBImplErr> {
+        let refs = RefCell::new((visited, cache));
+        let oolean = |ool: Oolean| Ok(ool.to_truthy());
         let reference = |name: &str, values: &[_]| {
-            let query = Query::Descriptor(name.into(), values.into());
-            self.query_inner_truthy(&query, &mut visited.borrow_mut())
+            let query = Query::Descriptor(name.into(), values.into(), DescriptorType::Truthy);
+            let (visited, cache) = &mut *refs.borrow_mut();
+            self.query_inner(&query, Some(cache_ref), visited, cache)
+                .and_then(|v| v.left().ok_or(()))
         };
         let access = |name: &str, values: &[_]| {
             let query = Query::Access(name.into(), values.into());
-            self.query_inner_truthy(&query, &mut visited.borrow_mut())
+            let (visited, cache) = &mut *refs.borrow_mut();
+            self.query_inner(&query, Some(cache_ref), visited, cache)
+                .and_then(|v| v.left().ok_or(()))
         };
         let compare = |c: &D1::County, n: Ntgr| {
-            self.eval_descriptor_county::<D1>(c, &mut visited.borrow_mut())
+            let (visited, cache) = &mut *refs.borrow_mut();
+            self.eval_descriptor_county::<D1>(cache_ref, c, v, visited, cache)
                 .map(|c| c.ge(n))
         };
-        let exists = |r: Relation, v: &V, f: &dyn Fn(&_) -> _| todo!();
+        let exists = |n: &str, p: &ShufflePattern<V, V>, f: &dyn Fn(&_) -> _| {
+            let shuffle = self.shuffles.get(n).ok_or(())?;
+            let (visited, cache) = &mut *refs.borrow_mut();
+            p.apply(shuffle)
+                .into_inner()
+                .into_iter()
+                .map(|v| f(&v))
+                .map(|t| self.eval_descriptor_truthy::<D1>(cache_ref, &t, v, visited, cache))
+                .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
+        };
         let conj = |a: &_, b: &_| {
-            let a = self.eval_descriptor_truthy::<D1>(a, &mut visited.borrow_mut())?;
-            let b = self.eval_descriptor_truthy::<D1>(b, &mut visited.borrow_mut())?;
+            let (visited, cache) = &mut *refs.borrow_mut();
+            let a = self.eval_descriptor_truthy::<D1>(cache_ref, a, v, visited, cache)?;
+            let b = self.eval_descriptor_truthy::<D1>(cache_ref, b, v, visited, cache)?;
             Ok(a.meet(&b))
         };
         let disj = |a: &_, b: &_| {
-            let a = self.eval_descriptor_truthy::<D1>(a, &mut visited.borrow_mut())?;
-            let b = self.eval_descriptor_truthy::<D1>(b, &mut visited.borrow_mut())?;
+            let (visited, cache) = &mut *refs.borrow_mut();
+            let a = self.eval_descriptor_truthy::<D1>(cache_ref, a, v, visited, cache)?;
+            let b = self.eval_descriptor_truthy::<D1>(cache_ref, b, v, visited, cache)?;
             Ok(a.join(&b))
         };
         let prior = |_: &_| todo!();
         let posterior = |_: &_| todo!();
 
         D1::eval_truthy(
-            t, oolean, reference, access, compare, exists, conj, disj, prior, posterior,
+            t, v, oolean, reference, access, compare, exists, conj, disj, prior, posterior,
         )
     }
 
     fn eval_descriptor_county<D1: Descriptor<V>>(
         &self,
+        cache_ref: CacheRef,
         c: &D1::County,
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<C, ()> {
-        let visited = RefCell::new(visited);
-        let ntgr = |n| Ok(C::lift(&T::top()).scale(n));
+        v: &[V],
+        visited: &mut HashSet<CacheRef>,
+        cache: &mut DBCache<T, C, V, L::Node>,
+    ) -> Result<C, DBImplErr> {
+        let refs = RefCell::new((visited, cache));
+        let ntgr = |n: Ntgr| Ok(n.to_county(T::top()));
         let reference = |name: &str, values: &[_]| {
-            let query = Query::Descriptor(name.into(), values.into());
-            self.query_inner_county(&query, &mut visited.borrow_mut())
+            let query = Query::Descriptor(name.into(), values.into(), DescriptorType::Truthy);
+            let (visited, cache) = &mut *refs.borrow_mut();
+            self.query_inner(&query, Some(cache_ref), visited, cache)
+                .and_then(|v| v.right().ok_or(()))
         };
         let comb = |a: &_, n, b: &_| {
-            let a = self.eval_descriptor_county::<D1>(a, &mut visited.borrow_mut())?;
-            let b = self.eval_descriptor_county::<D1>(b, &mut visited.borrow_mut())?;
+            let (visited, cache) = &mut *refs.borrow_mut();
+            let a = self.eval_descriptor_county::<D1>(cache_ref, a, v, visited, cache)?;
+            let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, visited, cache)?;
             Ok(a.scale(n).add(&b))
         };
         let min = |a: &_, b: &_| {
-            let a = self.eval_descriptor_county::<D1>(a, &mut visited.borrow_mut())?;
-            let b = self.eval_descriptor_county::<D1>(b, &mut visited.borrow_mut())?;
+            let (visited, cache) = &mut *refs.borrow_mut();
+            let a = self.eval_descriptor_county::<D1>(cache_ref, a, v, visited, cache)?;
+            let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, visited, cache)?;
             Ok(a.meet(&b))
         };
         let max = |a: &_, b: &_| {
-            let a = self.eval_descriptor_county::<D1>(a, &mut visited.borrow_mut())?;
-            let b = self.eval_descriptor_county::<D1>(b, &mut visited.borrow_mut())?;
+            let (visited, cache) = &mut *refs.borrow_mut();
+            let a = self.eval_descriptor_county::<D1>(cache_ref, a, v, visited, cache)?;
+            let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, visited, cache)?;
             Ok(a.join(&b))
         };
-        let count = |r: Relation, v: &_, f: &dyn Fn(&_) -> _| todo!();
+        let count = |n: &str, p: ShufflePattern<V, V>, f: &dyn Fn(&_) -> _| {
+            let shuffle = self.shuffles.get(n).ok_or(())?;
+            let (visited, cache) = &mut *refs.borrow_mut();
+            p.apply(shuffle)
+                .into_inner()
+                .into_iter()
+                .map(|v| f(&v))
+                .map(|t| self.eval_descriptor_truthy::<D1>(cache_ref, &t, v, visited, cache))
+                .try_fold(C::top(), |a, b| b.map(|b| a.add(&C::lift(&b))))
+        };
 
-        D1::eval_county(c, ntgr, reference, comb, min, max, count)
+        D1::eval_county(c, v, ntgr, reference, comb, min, max, count)
     }
-
-    fn query_inner_county(
-        &self,
-        query: &Query<V, L::Node>,
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<C, ()> {
-        if visited.contains(&query) {
-            return Ok(C::bottom());
-        }
-
-        match self.cache.query_county(query) {
-            Some(t) => Ok(t),
-            None => {
-                visited.insert(query.clone());
-                let value = match query {
-                    Query::Descriptor(name, values) => {
-                        self.eval_descriptor_ref_county(&name, values, visited)
-                    }
-                    _ => return Err(()),
-                }?;
-                let query = visited.take(query).unwrap();
-                self.cache.set_county(query, value.clone());
-                Ok(value)
-            }
-        }
-    }
-
-    fn eval_descriptor_ref_county(
-        &self,
-        descriptor: &str,
-        values: &[V],
-        visited: &mut HashSet<Query<V, L::Node>>,
-    ) -> Result<C, ()> {
-        match self.descriptors_truthy.get(descriptor) {
-            Some(descriptors) => {
-                let mut value = C::bottom();
-                for descriptor in descriptors {
-                    value = value.join(&self.eval_descriptor(
-                        descriptor,
-                        values,
-                        |_| Err(()),
-                        |c| Ok(c),
-                        visited,
-                    )?);
-                }
-                Ok(value)
-            }
-            None => Err(()),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-enum Query<V: Hash + Eq + Clone, LN: Hash + Eq + Clone> {
-    Descriptor(String, Vec<V>),
-    Node(LN),
-    Access(String, Vec<V>),
 }
