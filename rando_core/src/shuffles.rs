@@ -12,7 +12,6 @@ pub trait Shuffle<A: Hash + Eq, B: Hash + Eq> {
 
 pub trait ShuffleDelta<A: Hash + Eq, B: Hash + Eq> {
     fn affects(&self, pattern: &ShufflePattern<A, B>) -> bool;
-    fn is_destructive(&self) -> bool;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

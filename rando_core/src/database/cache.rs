@@ -5,7 +5,7 @@ use crate::{
 use either::Either;
 use petgraph::graph::{self, DiGraph};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     hash::Hash,
     rc::Rc,
 };
@@ -20,28 +20,48 @@ type NodeIndex = graph::NodeIndex<u32>;
 #[derive(Clone, Debug)]
 pub struct DBCache<'a, T, C, V, LN>
 where
-    T: Clone + Eq + Truthy + Sphery + Statey,
-    C: Clone + Eq + County<T> + Sphery + Statey,
+    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
+    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
     V: Clone + Hash + Eq,
     LN: Clone + Hash + Eq,
 {
     cache: Vec<Option<Either<T, C>>>,
     dependencies: DiGraph<Rc<Query<'a, V, LN>>, ()>,
     query_nodes: HashMap<Rc<Query<'a, V, LN>>, NodeIndex>,
-    patterns: HashMap<String, HashMap<ShufflePattern<V, V>, Vec<NodeIndex>>>,
+    patterns: HashMap<String, HashMap<ShufflePattern<V, V>, HashSet<NodeIndex>>>,
+    cycles: HashMap<NodeIndex, HashSet<NodeIndex>>,
 }
 
 impl<'a, T, C, V, LN> DBCache<'a, T, C, V, LN>
 where
-    T: Clone + Eq + Truthy + Sphery + Statey,
-    C: Clone + Eq + County<T> + Sphery + Statey,
+    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
+    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
     V: Clone + Hash + Eq,
     LN: Clone + Hash + Eq,
 {
-    pub fn register(&mut self, query: &Query<V, LN>) -> CacheRef {
+    pub fn register(
+        &mut self,
+        query: &Query<V, LN>,
+        parent: Option<CacheRef>,
+    ) -> Result<Either<T, C>, CacheRef> {
         match self.query_nodes.get(query) {
-            Some(&n) => CacheRef(n),
-            None => self.register_inner(query),
+            Some(n) => {
+                parent.map(|p| self.dependencies.update_edge(*n, p.0, ()));
+                match &self.cache[n.index()] {
+                    Some(v) => Ok(v.clone()),
+                    None => {
+                        // The cache isn't set, so either it's a cycle or the
+                        let parent = parent.expect("Cache entry registered but not set");
+                        self.cycles.entry(*n).or_default().insert(parent.0);
+                        Ok(query.expected_type().make_bottom())
+                    }
+                }
+            }
+            None => {
+                let n = self.register_inner(query);
+                parent.map(|p| self.dependencies.update_edge(n.0, p.0, ()));
+                Err(n)
+            }
         }
     }
 
@@ -64,26 +84,43 @@ where
         self.cache[cache_ref.0.index()].clone()
     }
 
-    pub fn set_cache(&mut self, cache_ref: CacheRef, value: Either<T, C>) {
+    pub fn set_cache<E>(
+        &mut self,
+        cache_ref: CacheRef,
+        value: Either<T, C>,
+        eval: impl Fn(CacheRef, &mut Self) -> Result<Either<T, C>, E>,
+    ) -> Result<(), E> {
         self.cache[cache_ref.0.index()] = Some(value);
+
+        if let Some(cycles) = self.cycles.get(&cache_ref.0) {
+            let cycles = cycles.iter().copied().collect();
+            self.update_dependants(cycles, eval)?;
+        }
+
+        Ok(())
     }
 
-    pub(super) fn add_dependency(&mut self, from: CacheRef, to: CacheRef) {
-        self.dependencies.update_edge(to.0, from.0, ());
+    pub fn add_shuffle_dependency(
+        &mut self,
+        shuffle: String,
+        pattern: ShufflePattern<V, V>,
+        cache_ref: CacheRef,
+    ) {
+        let patterns = self.patterns.entry(shuffle).or_default();
+        patterns.entry(pattern).or_default().insert(cache_ref.0);
     }
 
     fn cached_patterns<'b>(
         &'b self,
         shuffle: &str,
-    ) -> impl Iterator<Item = (&'b ShufflePattern<V, V>, &'b [NodeIndex])> + 'b {
+    ) -> impl Iterator<Item = (&'b ShufflePattern<V, V>, &'b HashSet<NodeIndex>)> + 'b {
         self.patterns
             .get(shuffle)
             .into_iter()
             .flat_map(|l| l.iter())
-            .map(|(a, b)| (a, &b[..]))
     }
 
-    pub(super) fn mod_shuffle<E, D: ShuffleDelta<V, V>>(
+    pub fn mod_shuffle<E, D: ShuffleDelta<V, V>>(
         &mut self,
         shuffle: &str,
         delta: &D,
@@ -96,45 +133,57 @@ where
             .copied()
             .collect::<VecDeque<_>>();
 
-        if delta.is_destructive() == false {
-            self.update_constructive(update_queue, eval)
-        } else {
-            self.update_destructive(update_queue, eval)
-        }
+        self.update_dependants(update_queue, eval)
     }
 
-    fn update_constructive<E>(
+    fn update_dependants<E>(
         &mut self,
         mut update_queue: VecDeque<NodeIndex>,
         eval: impl Fn(CacheRef, &mut Self) -> Result<Either<T, C>, E>,
     ) -> Result<(), E> {
+        let mut late_queue = Vec::new();
+
         while let Some(n) = update_queue.pop_front() {
-            let new = eval(CacheRef(n), self)?;
             let old = self.cache[n.index()]
-                .as_ref()
+                .clone()
                 .expect("Attempted to modify shuffle with unevaluated cache!");
 
-            if &new != old {
+            // Invalidate cache entry
+            self.cache[n.index()] = None;
+            let new = eval(CacheRef(n), self)?;
+
+            if new > old {
                 self.cache[n.index()] = Some(new);
                 update_queue.extend(self.dependencies.neighbors(n));
+            } else if new != old {
+                self.cache[n.index()] = if new.is_left() {
+                    Some(Either::Left(T::bottom()))
+                } else {
+                    Some(Either::Right(C::bottom()))
+                };
+
+                late_queue.push((n, new));
+                update_queue.extend(self.dependencies.neighbors(n));
+            } else {
+                self.cache[n.index()] = Some(old);
             }
         }
 
-        Ok(())
-    }
+        for (n, v) in late_queue {
+            self.cache[n.index()] = Some(v);
+            update_queue.extend(self.dependencies.neighbors(n));
+        }
 
-    fn update_destructive<E>(
-        &mut self,
-        mut update_queue: VecDeque<NodeIndex>,
-        eval: impl Fn(CacheRef, &mut Self) -> Result<Either<T, C>, E>,
-    ) -> Result<(), E> {
         while let Some(n) = update_queue.pop_front() {
             let new = eval(CacheRef(n), self)?;
             let old = self.cache[n.index()]
                 .as_ref()
                 .expect("Attempted to modify shuffle with unevaluated cache!");
 
-            todo!()
+            if &new > old {
+                self.cache[n.index()] = Some(new);
+                update_queue.extend(self.dependencies.neighbors(n));
+            }
         }
 
         Ok(())
@@ -143,8 +192,8 @@ where
 
 impl<T, C, V, LN> Default for DBCache<'_, T, C, V, LN>
 where
-    T: Clone + Eq + Truthy + Sphery + Statey,
-    C: Clone + Eq + County<T> + Sphery + Statey,
+    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
+    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
     V: Clone + Hash + Eq,
     LN: Clone + Hash + Eq,
 {
@@ -154,6 +203,7 @@ where
             dependencies: Default::default(),
             query_nodes: Default::default(),
             patterns: Default::default(),
+            cycles: Default::default(),
         }
     }
 }

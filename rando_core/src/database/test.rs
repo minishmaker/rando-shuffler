@@ -10,6 +10,7 @@ use crate::{
     shuffles::{Shuffle, ShuffleDelta, ShufflePattern},
 };
 use std::{
+    cmp::{self, Ordering},
     collections::{HashMap, HashSet},
     convert::Infallible,
     hash::Hash,
@@ -31,8 +32,8 @@ fn build_test_database<'a, T, C, L>(
     logic: L,
 ) -> impl Database<'a, RelationDescriptor<'a, &'a str>, L, &'a str, T, C, TestShuffle<'a>, Err = ()>
 where
-    T: Clone + Eq + Truthy + Sphery + Statey,
-    C: Clone + Eq + County<T> + Sphery + Statey,
+    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
+    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
     L: Logic<&'a str>,
     L::Node: Clone + Hash + Eq,
 {
@@ -56,11 +57,92 @@ where
 }
 
 #[test]
+fn test_relations() {
+    // (true) -> a -(0->1)> b -> c -> a
+    // a -(0->?)> d -ool> c
+    let mut graph = DiGraph::new();
+    let a = graph.add_node(());
+    let b = graph.add_node(());
+    let c = graph.add_node(());
+    let d = graph.add_node(());
+
+    graph.add_edge(b, a, RelationDescriptor::Ref("a->b", &["0", "1"]));
+    graph.add_edge(c, b, RelationDescriptor::Constant(Oolean::True));
+    graph.add_edge(d, a, RelationDescriptor::Ref("a->?", &["0"]));
+    graph.add_edge(c, d, RelationDescriptor::Constant(Oolean::Ool));
+    graph.add_edge(a, c, RelationDescriptor::Constant(Oolean::True));
+
+    let logic = TestLogic {
+        graph,
+        truthy_edges: vec![vec![RelationDescriptor::Constant(Oolean::True)]],
+    };
+
+    let mut database = build_test_database::<Oolean, TestCounty, _>(logic);
+
+    assert_eq!(Ok(Oolean::False), database.query_logic_node(&c));
+    assert_eq!(Ok(()), database.mod_shuffle("", &TestDelta::Add("0", "2")));
+    assert_eq!(Ok(Oolean::Ool), database.query_logic_node(&c));
+    assert_eq!(Ok(Oolean::False), database.query_logic_node(&b));
+    assert_eq!(Ok(()), database.mod_shuffle("", &TestDelta::Add("0", "1")));
+    assert_eq!(Ok(Oolean::True), database.query_logic_node(&c));
+    assert_eq!(
+        Ok(()),
+        database.mod_shuffle("", &TestDelta::Remove("0", "2"))
+    );
+    assert_eq!(Ok(Oolean::True), database.query_logic_node(&c));
+    assert_eq!(Ok(Oolean::True), database.query_logic_node(&d));
+    assert_eq!(
+        Ok(()),
+        database.mod_shuffle("", &TestDelta::Remove("0", "1"))
+    );
+    assert_eq!(Ok(Oolean::False), database.query_logic_node(&c));
+    assert_eq!(Ok(Oolean::False), database.query_logic_node(&b));
+    assert_eq!(Ok(Oolean::False), database.query_logic_node(&d));
+}
+
+#[test]
+fn test_graph() {
+    // Graph:
+    // (true) -> a -> b -ool> c -> d -false> e
+    // a -ool> f
+    // b -> f
+    // b -> a
+    let mut graph = DiGraph::new();
+    let a = graph.add_node(());
+    let b = graph.add_node(());
+    let c = graph.add_node(());
+    let d = graph.add_node(());
+    let e = graph.add_node(());
+    let f = graph.add_node(());
+
+    graph.add_edge(b, a, RelationDescriptor::Constant(Oolean::True));
+    graph.add_edge(c, b, RelationDescriptor::Constant(Oolean::Ool));
+    graph.add_edge(d, c, RelationDescriptor::Constant(Oolean::True));
+    graph.add_edge(e, d, RelationDescriptor::Constant(Oolean::False));
+    graph.add_edge(f, a, RelationDescriptor::Constant(Oolean::Ool));
+    graph.add_edge(f, b, RelationDescriptor::Constant(Oolean::True));
+    graph.add_edge(a, b, RelationDescriptor::Constant(Oolean::True));
+
+    let logic = TestLogic {
+        graph,
+        truthy_edges: vec![vec![RelationDescriptor::Constant(Oolean::True)]],
+    };
+
+    let database = build_test_database::<Oolean, TestCounty, _>(logic);
+
+    assert_eq!(Ok(Oolean::True), database.query_logic_node(&a));
+    assert_eq!(Ok(Oolean::Ool), database.query_logic_node(&d));
+    assert_eq!(Ok(Oolean::False), database.query_logic_node(&e));
+    assert_eq!(Ok(Oolean::True), database.query_logic_node(&f));
+}
+
+#[test]
 fn test_direct_query() {
     let logic = TestLogic {
         graph: DiGraph::new(),
+        truthy_edges: Vec::new(),
     };
-    let database = build_test_database(logic);
+    let database = build_test_database::<Oolean, TestCounty, _>(logic);
 
     assert_eq!(
         Ok(Oolean::True),
@@ -76,9 +158,17 @@ fn test_direct_query() {
     );
 
     assert_eq!(
-        Err::<TestCounty, _>(()),
-        database.query_descriptor_county("true", &[])
-    )
+        Ok(Oolean::True),
+        database.query_descriptor_truthy("true", &[])
+    );
+    assert_eq!(
+        Ok(Oolean::Ool),
+        database.query_descriptor_truthy("ool", &[])
+    );
+    assert_eq!(
+        Ok(Oolean::False),
+        database.query_descriptor_truthy("false", &[])
+    );
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -90,21 +180,17 @@ struct TestShuffle<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum TestDelta<'a> {
     Add(&'a str, &'a str),
+    Remove(&'a str, &'a str),
 }
 
 impl<'a> ShuffleDelta<&'a str, &'a str> for TestDelta<'a> {
     fn affects(&self, pattern: &ShufflePattern<&'a str, &'a str>) -> bool {
-        match self {
-            TestDelta::Add(a0, b0) => match pattern {
-                ShufflePattern::A(a1) => a0 == a1,
-                ShufflePattern::B(b1) => b0 == b1,
-                ShufflePattern::Both(a1, b1) => a0 == a1 && b0 == b1,
-            },
+        let (TestDelta::Add(a0, b0) | TestDelta::Remove(a0, b0)) = self;
+        match pattern {
+            ShufflePattern::A(a1) => a0 == a1,
+            ShufflePattern::B(b1) => b0 == b1,
+            ShufflePattern::Both(a1, b1) => a0 == a1 && b0 == b1,
         }
-    }
-
-    fn is_destructive(&self) -> bool {
-        false
     }
 }
 
@@ -112,11 +198,11 @@ impl<'a> Shuffle<&'a str, &'a str> for TestShuffle<'a> {
     type Delta = TestDelta<'a>;
 
     fn to(&self, a: &&'a str) -> HashSet<&'a str> {
-        self.to[a].clone()
+        self.to.get(a).map(|a| a.clone()).unwrap_or_default()
     }
 
     fn from(&self, b: &&'a str) -> HashSet<&'a str> {
-        self.from[b].clone()
+        self.from.get(b).map(|b| b.clone()).unwrap_or_default()
     }
 
     fn modify(&mut self, delta: &Self::Delta) {
@@ -125,6 +211,10 @@ impl<'a> Shuffle<&'a str, &'a str> for TestShuffle<'a> {
                 self.to.entry(a).or_insert(HashSet::new()).insert(b);
                 self.from.entry(b).or_insert(HashSet::new()).insert(a);
             }
+            TestDelta::Remove(a, b) => {
+                self.to.get_mut(a).map(|a| a.remove(b));
+                self.from.get_mut(b).map(|b| b.remove(a));
+            }
         }
     }
 }
@@ -132,6 +222,7 @@ impl<'a> Shuffle<&'a str, &'a str> for TestShuffle<'a> {
 #[derive(Clone, Default, Debug)]
 struct TestLogic<'a, V: Hash + Eq> {
     graph: DiGraph<(), RelationDescriptor<'a, V>>,
+    truthy_edges: Vec<Vec<RelationDescriptor<'a, V>>>,
 }
 
 impl<'a, V: Clone + Hash + Eq> Logic<V> for TestLogic<'a, V> {
@@ -146,10 +237,24 @@ impl<'a, V: Clone + Hash + Eq> Logic<V> for TestLogic<'a, V> {
         &'b self,
         source: &Self::Node,
     ) -> Box<dyn Iterator<Item = Edge<'b, Self::Descriptor, Self::Node>> + 'b> {
-        Box::new(self.graph.edges(*source).map(|e| Edge {
-            descriptor: e.weight(),
-            ty: EdgeTy::FromNode(e.target()),
-        }))
+        Box::new(
+            self.graph
+                .edges(*source)
+                .map(|e| Edge {
+                    descriptor: e.weight(),
+                    ty: EdgeTy::FromNode(e.target()),
+                })
+                .chain(
+                    self.truthy_edges
+                        .get(source.index())
+                        .into_iter()
+                        .flat_map(|v| v.iter())
+                        .map(|d| Edge {
+                            descriptor: d,
+                            ty: EdgeTy::FromTrue,
+                        }),
+                ),
+        )
     }
 
     fn access_nodes<'b>(
@@ -250,11 +355,11 @@ impl Truthy for Oolean {
     }
 
     fn join(&self, other: &Self) -> Self {
-        std::cmp::max(*self, *other)
+        cmp::max(*self, *other)
     }
 
     fn meet(&self, other: &Self) -> Self {
-        std::cmp::min(*self, *other)
+        cmp::min(*self, *other)
     }
 }
 
@@ -266,7 +371,7 @@ impl Sphery for Oolean {
 
 impl Statey for Oolean {}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TestCounty {
     access: Ntgr,
     ool: Ntgr,
@@ -296,15 +401,15 @@ impl Truthy for TestCounty {
 
     fn join(&self, other: &Self) -> Self {
         TestCounty {
-            access: std::cmp::max(self.access, other.access),
-            ool: std::cmp::max(self.ool, other.ool),
+            access: cmp::max(self.access, other.access),
+            ool: cmp::max(self.ool, other.ool),
         }
     }
 
     fn meet(&self, other: &Self) -> Self {
         TestCounty {
-            access: std::cmp::min(self.access, other.access),
-            ool: std::cmp::min(self.ool, other.ool),
+            access: cmp::min(self.access, other.access),
+            ool: cmp::min(self.ool, other.ool),
         }
     }
 }
@@ -350,3 +455,18 @@ impl Sphery for TestCounty {
 }
 
 impl Statey for TestCounty {}
+
+impl PartialOrd for TestCounty {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let access = self.access.cmp(&other.access);
+        let ool = self.ool.cmp(&other.ool);
+
+        match (access, ool) {
+            (Ordering::Greater, Ordering::Less) => None,
+            (Ordering::Less, Ordering::Greater) => None,
+            (a, Ordering::Equal) => Some(a),
+            (Ordering::Equal, b) => Some(b),
+            (a, _) => Some(a),
+        }
+    }
+}

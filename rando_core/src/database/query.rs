@@ -1,10 +1,23 @@
 use std::borrow::Cow;
 use std::hash::Hash;
 
+use either::Either;
+
+use crate::algebra::{County, Truthy};
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum DescriptorType {
     Truthy,
     County,
+}
+
+impl DescriptorType {
+    pub fn make_bottom<T: Truthy, C: County<T>>(&self) -> Either<T, C> {
+        match self {
+            DescriptorType::Truthy => Either::Left(T::bottom()),
+            DescriptorType::County => Either::Right(C::bottom()),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Debug)]
@@ -30,6 +43,13 @@ impl<'a, V: Hash + Eq + Clone, LN: Hash + Eq + Clone> Query<'a, V, LN> {
                 Cow::Owned(a.clone().into_owned()),
                 Cow::Owned(b.clone().into_owned()),
             ),
+        }
+    }
+
+    pub fn expected_type(&self) -> DescriptorType {
+        match self {
+            Query::Descriptor(_, _, t) => *t,
+            _ => DescriptorType::Truthy,
         }
     }
 }
