@@ -1,10 +1,4 @@
-use std::{
-    borrow::{Borrow, Cow},
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    hash::Hash,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, hash::Hash};
 
 use either::Either;
 
@@ -66,7 +60,7 @@ where
     _descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
     descriptors_truthy: HashMap<&'a str, Vec<D>>,
     descriptors_county: HashMap<&'a str, Vec<D>>,
-    cache: RefCell<DBCache<'a, T, C, V, L::Node>>,
+    cache: RefCell<DBCache<'a, T, C, V, L::Node, DBImplErr>>,
 }
 
 impl<'a, D, L, V, T, C, R> Database<'a, D, L, V, T, C, R> for DBImpl<'a, D, L, V, T, C, R>
@@ -131,7 +125,9 @@ where
 
         self.cache
             .borrow_mut()
-            .mod_shuffle(shuffle, delta, |n, c| self.eval_query(n, c))
+            .mod_shuffle(shuffle, delta, |n, c| self.eval_query(n, c));
+
+        Ok(())
     }
 }
 
@@ -155,16 +151,16 @@ where
         &self,
         query: &Query<V, L::Node>,
         parent: Option<CacheRef>,
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<Either<T, C>, DBImplErr> {
         let result = cache.register(query, parent);
 
         match result {
-            Ok(v) => Ok(v),
+            Ok(v) => v,
             Err(cache_ref) => {
-                let value = self.eval_query(cache_ref, cache)?;
+                let value = self.eval_query(cache_ref, cache);
                 cache.set_cache(cache_ref, value.clone(), |n, c| self.eval_query(n, c));
-                Ok(value)
+                value
             }
         }
     }
@@ -172,7 +168,7 @@ where
     fn eval_query(
         &self,
         cache_ref: CacheRef,
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<Either<T, C>, DBImplErr> {
         let query = cache.get_query(cache_ref);
         let result = match &*query {
@@ -191,7 +187,7 @@ where
         &self,
         cache_ref: CacheRef,
         node: &L::Node,
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<T, DBImplErr> {
         self.logic
             .edges(node)
@@ -218,7 +214,7 @@ where
         cache_ref: CacheRef,
         name: &str,
         values: &[V],
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<T, DBImplErr> {
         self.logic
             .access_nodes(name, values)
@@ -236,7 +232,7 @@ where
         descriptor: &str,
         values: &[V],
         ty: DescriptorType,
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<Either<T, C>, DBImplErr> {
         let descriptors = match ty {
             DescriptorType::Truthy => self.descriptors_truthy.get(descriptor).ok_or(()),
@@ -264,7 +260,7 @@ where
         cache_ref: CacheRef,
         descriptor: &D1,
         values: &[V],
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<Either<T, C>, DBImplErr> {
         let cache = RefCell::new(cache);
         descriptor.eval(
@@ -287,7 +283,7 @@ where
         cache_ref: CacheRef,
         t: &D1::Truthy,
         v: &[V],
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<T, DBImplErr> {
         let cache = RefCell::new(cache);
         let oolean = |ool: Oolean| Ok(ool.to_truthy());
@@ -344,7 +340,7 @@ where
         cache_ref: CacheRef,
         c: &D1::County,
         v: &[V],
-        cache: &mut DBCache<T, C, V, L::Node>,
+        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<C, DBImplErr> {
         let cache = RefCell::new(cache);
         let ntgr = |n: Ntgr| Ok(n.to_county(T::top()));

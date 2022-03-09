@@ -1,7 +1,6 @@
 use petgraph::{
     graph::{DiGraph, NodeIndex},
     visit::EdgeRef,
-    Graph,
 };
 
 use crate::{
@@ -267,6 +266,7 @@ impl<'a, V: Clone + Hash + Eq> Logic<V> for TestLogic<'a, V> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 enum RelationDescriptor<'a, V: Hash + Eq> {
     Constant(Oolean),
     Ref(&'a str, &'a [V]),
@@ -281,7 +281,7 @@ impl<V: Clone + Hash + Eq> Descriptor<V> for RelationDescriptor<'_, V> {
     type Truthy = Self;
     type County = Infallible;
 
-    fn eval<R, T, C>(&self, v: &[V], t: T, c: C) -> R
+    fn eval<R, T, C>(&self, v: &[V], t: T, _c: C) -> R
     where
         T: Fn(&Self::Truthy, &[V]) -> R,
         C: Fn(&Self::County, &[V]) -> R,

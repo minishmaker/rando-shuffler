@@ -12,6 +12,13 @@ pub enum DescriptorType {
 }
 
 impl DescriptorType {
+    pub fn get_type<T: Truthy, C: County<T>>(e: &Either<T, C>) -> Self {
+        match e {
+            Either::Left(_) => DescriptorType::Truthy,
+            Either::Right(_) => DescriptorType::County,
+        }
+    }
+
     pub fn make_bottom<T: Truthy, C: County<T>>(&self) -> Either<T, C> {
         match self {
             DescriptorType::Truthy => Either::Left(T::bottom()),
