@@ -61,11 +61,7 @@ impl<'a, 'b> TreeError<'a, 'b> {
     }
 }
 
-pub fn merge_results<'a, 'b, T, U, E, F>(
-    a: Result<T, E>,
-    b: Result<U, E>,
-    f: F,
-) -> Result<(T, U), E>
+pub fn merge_results<T, U, E, F>(a: Result<T, E>, b: Result<U, E>, f: F) -> Result<(T, U), E>
 where
     F: FnOnce(E, E) -> E,
 {
@@ -149,7 +145,7 @@ impl TreeError<'_, '_> {
         };
 
         errors
-            .into_iter()
+            .iter()
             .map(move |e| e.single_diagnostic(file.clone()))
     }
 
@@ -159,15 +155,15 @@ impl TreeError<'_, '_> {
                 expected, actual, ..
             } => format!("Expected {}, found {}", expected, actual),
             TreeError::FullIdent { keyword, .. } if keyword.1 == "node" => {
-                format!("Node names may not be namespaced or global")
+                "Node names may not be namespaced or global".into()
             }
-            TreeError::FullIdent { .. } => format!("Scope names may not be namespaced or global"),
-            TreeError::Append { .. } => format!("Descriptors may not be in append mode"),
-            TreeError::Children { .. } => format!("Descriptors may not have children"),
+            TreeError::FullIdent { .. } => "Scope names may not be namespaced or global".into(),
+            TreeError::Append { .. } => "Descriptors may not be in append mode".into(),
+            TreeError::Children { .. } => "Descriptors may not have children".into(),
             TreeError::MultipleIdents { keyword, .. } if keyword.1 == "node" => {
-                format!("Nodes may not have multiple identifiers")
+                "Nodes may not have multiple identifiers".into()
             }
-            TreeError::MultipleIdents { .. } => format!("Scopes may not have multiple identifiers"),
+            TreeError::MultipleIdents { .. } => "Scopes may not have multiple identifiers".into(),
             TreeError::Multiple(_) => panic!("Only single errors have diagnostic messages"),
         }
     }

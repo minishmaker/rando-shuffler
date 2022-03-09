@@ -7,7 +7,7 @@ pub struct Span<T>(pub usize, pub T, pub usize);
 
 impl<T> Span<T> {
     pub fn limits(spans: &[Self]) -> Option<Span<()>> {
-        (spans.len() > 0).then(|| Span(spans[0].0, (), spans[spans.len() - 1].2))
+        (!spans.is_empty()).then(|| Span(spans[0].0, (), spans[spans.len() - 1].2))
     }
 
     pub fn including<U>(&self, other: &Span<U>) -> Span<()> {
@@ -34,7 +34,7 @@ impl<T> Span<T> {
     }
 }
 
-pub fn substr_index<'a, 'b>(full: &'a str, sub: &'b str) -> Option<usize> {
+pub fn substr_index(full: &str, sub: &str) -> Option<usize> {
     assert!(full.len() <= (isize::MAX as usize));
     let full = full.as_bytes().as_ptr_range();
     let sub = sub.as_bytes().as_ptr_range();

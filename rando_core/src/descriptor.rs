@@ -2,6 +2,7 @@ use crate::shuffles::ShufflePattern;
 
 use super::algebra::{Ntgr, Oolean};
 
+#[allow(clippy::too_many_arguments)]
 pub trait Descriptor<V> {
     type Truthy;
     type County;

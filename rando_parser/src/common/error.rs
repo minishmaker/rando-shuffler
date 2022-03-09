@@ -94,7 +94,7 @@ impl<'a, E: RandoError<'a>> ParseError<'a, E> {
                 .unwrap();
 
             let message = if self.remaining.is_empty() {
-                format!("Unexpected end of input")
+                "Unexpected end of input".into()
             } else {
                 format!("Unexpected error at \"{}\"", actual.1)
             };
@@ -220,7 +220,7 @@ pub fn vec_merge<T>(mut acc: Vec<T>, t: T) -> Vec<T> {
     acc
 }
 
-pub fn accumulate_errors<'a, A, T, B, E>(
+pub fn accumulate_errors<A, T, B, E>(
     acc: Result<A, B>,
     result: Result<T, E>,
     merge_ok: impl FnOnce(A, T) -> A,

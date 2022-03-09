@@ -40,16 +40,14 @@ mod test;
 type ParseResult<'a, T> =
     IResult<&'a str, Result<T, Vec<DescriptorError<'a>>>, ParseError<'a, DescriptorError<'a>>>;
 
-pub fn rules<'a>(
-    full: &'a str,
-) -> Result<HashMap<&str, Vec<RuleDef>>, ParseError<DescriptorError>> {
+pub fn rules(full: &str) -> Result<HashMap<&str, Vec<RuleDef>>, ParseError<DescriptorError>> {
     let mut map = Some(Ok(HashMap::new()));
     all_consuming(fold_many0_accumulate(
         cs(|input| rule(full, input)),
         move || map.take().unwrap(),
         |mut m, r| {
             let keyword = r.reference.keyword.inner();
-            m.entry(keyword).or_insert(Vec::new()).push(r);
+            m.entry(keyword).or_insert_with(Vec::new).push(r);
             m
         },
     ))(full)

@@ -171,16 +171,15 @@ where
         cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
     ) -> Result<Either<T, C>, DBImplErr> {
         let query = cache.get_query(cache_ref);
-        let result = match &*query {
+        match &*query {
             Query::Descriptor(name, values, ty) => {
-                self.eval_descriptor_ref(cache_ref, &name, values, *ty, cache)
+                self.eval_descriptor_ref(cache_ref, name, values, *ty, cache)
             }
             Query::Access(name, values) => self
                 .eval_access(cache_ref, name, values, cache)
                 .map(Either::Left),
             Query::Node(node) => self.eval_node(cache_ref, node, cache).map(Either::Left),
-        };
-        result
+        }
     }
 
     fn eval_node(
@@ -240,7 +239,7 @@ where
         }?;
 
         let values = descriptors
-            .into_iter()
+            .iter()
             .map(|d| self.eval_descriptor(cache_ref, d, values, cache));
 
         match ty {
