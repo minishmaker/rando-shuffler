@@ -144,7 +144,9 @@ where
 
             let new = eval(CacheRef(n), self);
 
-            if let Some(late) = update_if_changed(old, new, &mut self.cache[n.index()]) {
+            let (value, change) = updated_value(old, new);
+            self.cache[n.index()] = Some(value);
+            if let Some(late) = change {
                 update_queue.extend(self.dependencies.neighbors(n));
                 assert!(late.is_none(), "Attempted to decrease cached value")
             }
@@ -165,7 +167,9 @@ where
 
             let new = eval(CacheRef(n), self);
 
-            if let Some(late) = update_if_changed(old, new, &mut self.cache[n.index()]) {
+            let (value, change) = updated_value(old, new);
+            self.cache[n.index()] = Some(value);
+            if let Some(late) = change {
                 update_queue.extend(self.dependencies.neighbors(n));
                 if let Some(late) = late {
                     late_update.push((n, late));
@@ -182,36 +186,32 @@ where
     }
 }
 
-/// Replaces dest with the appropriate value
+/// Finds the new value for the cache, given the old and new values.
 /// If new is unchanged from old, returns None
 /// If new is strictly greater than old, returns Some(None)
-/// If new otherwise does not equal old, returns Some(Some(new)) and sets dest to bottom
-fn update_if_changed<T, C, E>(
+/// If new otherwise does not equal old, returns Some(Some(new))
+fn updated_value<T, C, E>(
     old: Result<Either<T, C>, E>,
     new: Result<Either<T, C>, E>,
-    dest: &mut Option<Result<Either<T, C>, E>>,
-) -> Option<Option<Either<T, C>>>
+) -> (Result<Either<T, C>, E>, Option<Option<Either<T, C>>>)
 where
     T: PartialEq + PartialOrd + Truthy,
     C: PartialEq + PartialOrd + County<T>,
 {
     if old.is_err() || new.is_err() {
-        *dest = Some(new);
         // err -> ok is always increase
         // ok -> err is always decrease to bottom
-        return Some(None);
+        return (new, Some(None));
     }
 
     if let (Ok(old), Ok(new)) = (old, new) {
         if new > old {
-            *dest = Some(Ok(new));
-            Some(None)
+            (Ok(new), Some(None))
         } else if new != old {
-            *dest = Some(Ok(DescriptorType::get_type(&new).make_bottom()));
-            Some(Some(new))
+            let bottom = DescriptorType::get_type(&new).make_bottom();
+            (Ok(bottom), Some(Some(new)))
         } else {
-            *dest = Some(Ok(old));
-            None
+            (Ok(new), None)
         }
     } else {
         unreachable!()
