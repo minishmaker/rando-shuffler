@@ -30,7 +30,7 @@ where
     dependencies: DiGraph<Rc<Query<'a, V, LN>>, ()>,
     query_nodes: HashMap<Rc<Query<'a, V, LN>>, NodeIndex>,
     patterns: HashMap<String, HashMap<ShufflePattern<V, V>, HashSet<NodeIndex>>>,
-    cycles: HashMap<NodeIndex, VecDeque<NodeIndex>>,
+    cycles: HashMap<NodeIndex, Vec<NodeIndex>>,
 }
 
 impl<'a, T, C, V, LN, E> DBCache<'a, T, C, V, LN, E>
@@ -54,7 +54,7 @@ where
                     None => {
                         // The cache isn't set, so either it's a cycle or something wasn't set
                         let parent = parent.expect("Top-level cache entry registered but not set");
-                        self.cycles.entry(*n).or_default().push_back(parent.0);
+                        self.cycles.entry(*n).or_default().push(parent.0);
                         Ok(Ok(query.expected_type().make_bottom()))
                     }
                 }
@@ -90,9 +90,8 @@ where
     ) {
         self.cache[cache_ref.0.index()] = Some(value);
 
-        if let Some(cycles) = self.cycles.get_mut(&cache_ref.0) {
-            let cycles = std::mem::take(cycles);
-            self.increase_dependants(cycles, eval);
+        if let Some(cycles) = self.cycles.remove(&cache_ref.0) {
+            self.increase_dependants(cycles.into(), eval);
         }
     }
 
