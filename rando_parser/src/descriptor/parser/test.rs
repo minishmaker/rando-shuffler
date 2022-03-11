@@ -153,7 +153,9 @@ fn test_item() {
         parser("12 "),
         Ok((
             " ",
-            Ok(RuleBodyUntyped::County(RuleBodyCounty::Constant(12)))
+            Ok(RuleBodyUntyped::County(RuleBodyCounty::Constant(
+                Ntgr::Num(12)
+            )))
         ))
     );
     assert_matches!(parser("true "), Ok((" ", Ok(RuleBodyUntyped::Truthy(_)))));
@@ -198,7 +200,10 @@ fn test_item() {
         parser("ref() "),
         Ok((" ", Ok(RuleBodyCounty::Reference(_))))
     );
-    assert_matches!(parser("12 "), Ok((" ", Ok(RuleBodyCounty::Constant(12)))));
+    assert_matches!(
+        parser("12 "),
+        Ok((" ", Ok(RuleBodyCounty::Constant(Ntgr::Num(12)))))
+    );
     assert_matches!(parser("true "), Ok((" ", Err(e))) => {
         assert_matches!(&e[..], [DescriptorError::Type {
             expected: DescriptorType::County,

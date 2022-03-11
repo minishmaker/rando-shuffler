@@ -1,5 +1,5 @@
 use codespan_reporting::diagnostic::{Diagnostic, Label};
-use rando_core::algebra::Oolean;
+use rando_core::algebra::{Ntgr, Oolean};
 
 use crate::{
     common::{
@@ -46,9 +46,9 @@ pub enum RuleBodyUntyped<'a> {
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum RuleBodyCounty<'a> {
-    Constant(u32),
+    Constant(Ntgr),
     Reference(Reference<'a>),
-    LinearComb(Vec<(RuleBodyCounty<'a>, u32)>),
+    LinearComb(Vec<(RuleBodyCounty<'a>, Ntgr)>),
     Min(Vec<RuleBodyCounty<'a>>),
     Max(Vec<RuleBodyCounty<'a>>),
     Count(
@@ -64,7 +64,7 @@ pub enum RuleBodyTruthy<'a> {
     Constant(Oolean),
     Reference(Reference<'a>),
     Access(Reference<'a>),
-    Compare(Box<RuleBodyCounty<'a>>, u32),
+    Compare(Box<RuleBodyCounty<'a>>, Ntgr),
     Exists(
         Span<Ident<'a>>,
         Relation<'a>,

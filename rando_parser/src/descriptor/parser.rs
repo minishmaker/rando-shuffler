@@ -12,7 +12,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult, Parser,
 };
-use rando_core::algebra::Oolean;
+use rando_core::algebra::{Ntgr, Oolean};
 
 use crate::{
     common::{
@@ -95,16 +95,16 @@ fn and<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, T
 fn compare<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, T> {
     pair(
         |input| comb_start::<T>(full, input),
-        opt(preceded(cs(tag(">=")), u32)),
+        opt(preceded(cs(tag(">=")), ntgr)),
     )
     .parse(input)
     .and_then(|(i, (t, c))| match c {
         Some(_) => {
             let reparse = pair(
                 |input| comb_start::<RuleBodyCounty>(full, input),
-                preceded(cs(tag(">=")), u32),
+                preceded(cs(tag(">=")), ntgr),
             )
-            .map(|(c, n)| c.map(|c| (c, n)))
+            .map(|(c, n)| c.map(|c| (c, n.unwrap())))
             .map_ok(|(c, n)| RuleBodyTruthy::Compare(Box::new(c), n))
             .map_ok(RuleBodyUntyped::Truthy);
 
@@ -136,8 +136,11 @@ fn county_comb<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Span<RuleBo
         full,
         separated_list1_accumulate(
             cs(char('+')).map(Ok),
-            pair(|input| item(full, input), opt(preceded(cs(char('*')), u32)))
-                .map(|(i, v)| i.map(|i| (i, v.unwrap_or(1)))),
+            pair(
+                |input| item(full, input),
+                opt(preceded(cs(char('*')), ntgr)),
+            )
+            .map(|(i, v)| i.map(|i| (i, v.unwrap_or(Ok(Ntgr::Num(1))).unwrap()))),
         ),
     )
     .map_ok(|c| c.map(RuleBodyCounty::LinearComb))
@@ -163,9 +166,12 @@ fn item<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, 
 }
 
 fn county_item<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyCounty<'a>> {
-    alt((u32.map(RuleBodyCounty::Constant).map(Ok), |input| {
-        count(full, input)
-    }))(input)
+    alt((
+        ntgr.map(Result::unwrap)
+            .map(RuleBodyCounty::Constant)
+            .map(Ok),
+        |input| count(full, input),
+    ))(input)
 }
 
 fn truthy_item<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyTruthy<'a>> {
@@ -256,6 +262,15 @@ fn oolean(input: &str) -> ParseResult<Oolean> {
         )),
         not(alpha1),
     )
+    .map(Ok)
+    .parse(input)
+}
+
+fn ntgr(input: &str) -> ParseResult<Ntgr> {
+    alt((
+        tag("inf").map(|_| Ntgr::Infinity),
+        u32.map(|n| Ntgr::Num(n)),
+    ))
     .map(Ok)
     .parse(input)
 }
