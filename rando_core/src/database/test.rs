@@ -266,15 +266,12 @@ impl<'a, V: Clone + Hash + Eq> Logic<V> for TestLogic<'a, V> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 enum RelationDescriptor<'a, V: Hash + Eq> {
     Constant(Oolean),
     Ref(&'a str, &'a [V]),
     A(&'a str),
     B(&'a str),
     Both(&'a str),
-    And(Box<(RelationDescriptor<'a, V>, RelationDescriptor<'a, V>)>),
-    Or(Box<(RelationDescriptor<'a, V>, RelationDescriptor<'a, V>)>),
 }
 
 impl<V: Clone + Hash + Eq> Descriptor<V> for RelationDescriptor<'_, V> {
@@ -297,8 +294,8 @@ impl<V: Clone + Hash + Eq> Descriptor<V> for RelationDescriptor<'_, V> {
         _a: impl Fn(&str, &[V]) -> R,
         _comp: impl Fn(&Self::County, Ntgr) -> R,
         ex: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
-        conj: impl Fn(&Self::Truthy, &Self::Truthy) -> R,
-        disj: impl Fn(&Self::Truthy, &Self::Truthy) -> R,
+        _conj: impl Fn(R, &Self::Truthy) -> R,
+        _disj: impl Fn(R, &Self::Truthy) -> R,
         _prio: impl Fn(&[(bool, V)]) -> R,
         _post: impl Fn(&[(bool, V)]) -> R,
     ) -> R {
@@ -316,14 +313,6 @@ impl<V: Clone + Hash + Eq> Descriptor<V> for RelationDescriptor<'_, V> {
                 &ShufflePattern::Both(values[0].clone(), values[1].clone()),
                 &|_| Self::Constant(Oolean::True),
             ),
-            Self::And(b) => {
-                let (a, b) = &**b;
-                conj(a, b)
-            }
-            Self::Or(b) => {
-                let (a, b) = &**b;
-                disj(a, b)
-            }
         }
     }
 
@@ -332,9 +321,9 @@ impl<V: Clone + Hash + Eq> Descriptor<V> for RelationDescriptor<'_, V> {
         _values: &[V],
         c: impl Fn(Ntgr) -> R,
         _r: impl Fn(&str, &[V]) -> R,
-        _comb: impl Fn(&Self::County, Ntgr, &Self::County) -> R,
-        _min: impl Fn(&Self::County, &Self::County) -> R,
-        _max: impl Fn(&Self::County, &Self::County) -> R,
+        _comb: impl Fn(R, &Self::County, Ntgr) -> R,
+        _min: impl Fn(R, &Self::County) -> R,
+        _max: impl Fn(R, &Self::County) -> R,
         _ct: impl Fn(&str, ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
     ) -> R {
         c(Ntgr::Infinity)

@@ -314,15 +314,15 @@ where
                 .map(|t| self.eval_descriptor_truthy::<D1>(cache_ref, &t, v, cache))
                 .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
         };
-        let conj = |a: &_, b: &_| {
+        let conj = |r, b: &_| {
             let cache = &mut *cache.borrow_mut();
-            let a = self.eval_descriptor_truthy::<D1>(cache_ref, a, v, cache)?;
+            let a: T = r?;
             let b = self.eval_descriptor_truthy::<D1>(cache_ref, b, v, cache)?;
             Ok(a.meet(&b))
         };
-        let disj = |a: &_, b: &_| {
+        let disj = |r, b: &_| {
             let cache = &mut *cache.borrow_mut();
-            let a = self.eval_descriptor_truthy::<D1>(cache_ref, a, v, cache)?;
+            let a: T = r?;
             let b = self.eval_descriptor_truthy::<D1>(cache_ref, b, v, cache)?;
             Ok(a.join(&b))
         };
@@ -349,21 +349,21 @@ where
             self.query_inner(&query, Some(cache_ref), cache)
                 .and_then(|v| v.right().ok_or(()))
         };
-        let comb = |a: &_, n, b: &_| {
+        let comb = |r, b: &_, n| {
             let cache = &mut *cache.borrow_mut();
-            let a = self.eval_descriptor_county::<D1>(cache_ref, a, v, cache)?;
+            let a: C = r?;
             let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, cache)?;
-            Ok(a.scale(n).add(&b))
+            Ok(a.add(&b.scale(n)))
         };
-        let min = |a: &_, b: &_| {
+        let min = |r, b: &_| {
             let cache = &mut *cache.borrow_mut();
-            let a = self.eval_descriptor_county::<D1>(cache_ref, a, v, cache)?;
+            let a: C = r?;
             let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, cache)?;
             Ok(a.meet(&b))
         };
-        let max = |a: &_, b: &_| {
+        let max = |r, b: &_| {
             let cache = &mut *cache.borrow_mut();
-            let a = self.eval_descriptor_county::<D1>(cache_ref, a, v, cache)?;
+            let a: C = r?;
             let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, cache)?;
             Ok(a.join(&b))
         };
