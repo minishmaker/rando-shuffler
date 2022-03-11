@@ -1,4 +1,5 @@
 use assert_matches::assert_matches;
+use rando_core::algebra::Oolean;
 
 use super::*;
 use crate::{descriptor::typecheck::DescriptorType, FullIdent};
@@ -13,9 +14,12 @@ fn test_rule() {
     let parser = |input| rule(input, input);
     assert_matches!(
         parser("rule(Full, gLob, vAr)\n\t=\n true  "),
-        Ok(("", Ok(RuleDef { .. })))
+        Ok(("", Ok(RuleDefUntyped { .. })))
     );
-    assert_matches!(parser("rule()\n\t=\n 3  \n"), Ok(("", Ok(RuleDef { .. }))));
+    assert_matches!(
+        parser("rule()\n\t=\n 3  \n"),
+        Ok(("", Ok(RuleDefUntyped { .. })))
+    );
 }
 
 #[test]
@@ -81,15 +85,21 @@ fn test_and() {
 
 #[test]
 fn test_cmp() {
-    let parser = |input| compare::<RuleBody>(input, input);
-    assert_matches!(parser("true "), Ok((" ", Ok(RuleBody::Truthy(_)))));
+    let parser = |input| compare::<RuleBodyUntyped>(input, input);
+    assert_matches!(parser("true "), Ok((" ", Ok(RuleBodyUntyped::Truthy(_)))));
     assert_matches!(
         parser("2 >= 3 "),
-        Ok((" ", Ok(RuleBody::Truthy(RuleBodyTruthy::Compare(..)))))
+        Ok((
+            " ",
+            Ok(RuleBodyUntyped::Truthy(RuleBodyTruthy::Compare(..)))
+        ))
     );
     assert_matches!(
         parser("2 * 2 >= 3 "),
-        Ok((" ", Ok(RuleBody::Truthy(RuleBodyTruthy::Compare(..)))))
+        Ok((
+            " ",
+            Ok(RuleBodyUntyped::Truthy(RuleBodyTruthy::Compare(..)))
+        ))
     );
     assert_matches!(parser("true >= 2"), Ok(("", Err(e))) => {
         assert_matches!(&e[..], &[DescriptorError::Type {
@@ -101,15 +111,21 @@ fn test_cmp() {
 
 #[test]
 fn test_comb() {
-    let parser = |input| comb_start::<RuleBody>(input, input);
-    assert_matches!(parser("true "), Ok((" ", Ok(RuleBody::Truthy(_)))));
+    let parser = |input| comb_start::<RuleBodyUntyped>(input, input);
+    assert_matches!(parser("true "), Ok((" ", Ok(RuleBodyUntyped::Truthy(_)))));
     assert_matches!(
         parser("2 * 2 "),
-        Ok((" ", Ok(RuleBody::County(RuleBodyCounty::LinearComb(_)))))
+        Ok((
+            " ",
+            Ok(RuleBodyUntyped::County(RuleBodyCounty::LinearComb(_)))
+        ))
     );
     assert_matches!(
         parser("2 + 2 "),
-        Ok((" ", Ok(RuleBody::County(RuleBodyCounty::LinearComb(_)))))
+        Ok((
+            " ",
+            Ok(RuleBodyUntyped::County(RuleBodyCounty::LinearComb(_)))
+        ))
     );
     assert_matches!(parser("true * 2"), Ok(("", Err(e))) => {
         assert_matches!(&e[..], &[DescriptorError::Type {
@@ -128,25 +144,31 @@ fn test_comb() {
 #[test]
 fn test_item() {
     // Untyped
-    let parser = |input| item::<RuleBody>(input, input);
-    assert_matches!(parser("ref() "), Ok((" ", Ok(RuleBody::Reference(_)))));
+    let parser = |input| item::<RuleBodyUntyped>(input, input);
+    assert_matches!(
+        parser("ref() "),
+        Ok((" ", Ok(RuleBodyUntyped::Reference(_))))
+    );
     assert_matches!(
         parser("12 "),
-        Ok((" ", Ok(RuleBody::County(RuleBodyCounty::Constant(12)))))
+        Ok((
+            " ",
+            Ok(RuleBodyUntyped::County(RuleBodyCounty::Constant(12)))
+        ))
     );
-    assert_matches!(parser("true "), Ok((" ", Ok(RuleBody::Truthy(_)))));
+    assert_matches!(parser("true "), Ok((" ", Ok(RuleBodyUntyped::Truthy(_)))));
     assert_matches!(
         parser("? vAlpha <- rel - gB (true) "),
-        Ok((" ", Ok(RuleBody::Truthy(_))))
+        Ok((" ", Ok(RuleBodyUntyped::Truthy(_))))
     );
     assert_matches!(
         parser("+ vAlpha <- rel - gB (true) "),
-        Ok((" ", Ok(RuleBody::County(_))))
+        Ok((" ", Ok(RuleBodyUntyped::County(_))))
     );
-    assert_matches!(parser("?[~vA] "), Ok((" ", Ok(RuleBody::Truthy(_)))));
+    assert_matches!(parser("?[~vA] "), Ok((" ", Ok(RuleBodyUntyped::Truthy(_)))));
     assert_matches!(
         parser("( false ; ool ; true ) "),
-        Ok((" ", Ok(RuleBody::Or(_))))
+        Ok((" ", Ok(RuleBodyUntyped::Or(_))))
     );
 
     // Truthy

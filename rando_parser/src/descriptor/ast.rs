@@ -1,9 +1,20 @@
-use crate::{common::span::Span, FullIdent, Ident};
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use rando_core::algebra::Oolean;
+
+use crate::{
+    common::{
+        error::{CommonError, RandoError},
+        span::Span,
+    },
+    FullIdent, Ident,
+};
+
+use super::typecheck::DescriptorType;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct RuleDef<'a> {
+pub struct RuleDefUntyped<'a> {
     pub reference: Reference<'a>,
-    pub body: RuleBody<'a>,
+    pub body: RuleBodyUntyped<'a>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -25,12 +36,12 @@ pub struct Relation<'a> {
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub enum RuleBody<'a> {
+pub enum RuleBodyUntyped<'a> {
     County(RuleBodyCounty<'a>),
     Truthy(RuleBodyTruthy<'a>),
     Reference(Reference<'a>),
-    And(Vec<RuleBody<'a>>),
-    Or(Vec<RuleBody<'a>>),
+    And(Vec<RuleBodyUntyped<'a>>),
+    Or(Vec<RuleBodyUntyped<'a>>),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -72,9 +83,34 @@ pub enum StateBody<'a> {
     NotSet(Value<'a>),
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
-pub enum Oolean {
-    False,
-    Ool,
-    True,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DescriptorError<'a> {
+    Common(CommonError<'a>),
+    Type {
+        expected: DescriptorType,
+        actual: Span<DescriptorType>,
+    },
+}
+
+impl<'a> RandoError<'a> for DescriptorError<'a> {
+    fn from_common(common: CommonError<'a>) -> Self {
+        DescriptorError::Common(common)
+    }
+
+    fn diagnostic<F: Clone>(&self, file: &F, input: &str) -> Diagnostic<F> {
+        match self {
+            DescriptorError::Common(c) => c.diagnostic(file, input),
+            DescriptorError::Type { expected, actual } => {
+                let range = actual.range();
+                let labels = vec![Label::primary(file.clone(), range)];
+                Diagnostic::error()
+                    .with_message(format!(
+                        "Type error: expected {}, found {}",
+                        expected,
+                        actual.inner()
+                    ))
+                    .with_labels(labels)
+            }
+        }
+    }
 }

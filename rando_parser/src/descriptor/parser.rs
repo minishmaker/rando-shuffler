@@ -12,6 +12,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult, Parser,
 };
+use rando_core::algebra::Oolean;
 
 use crate::{
     common::{
@@ -26,12 +27,8 @@ use crate::{
 };
 
 use super::{
-    ast::{
-        Oolean, Reference, Relation, RuleBody, RuleBodyCounty, RuleBodyTruthy, RuleDef, StateBody,
-        Value,
-    },
+    ast::*,
     typecheck::{typecheck, Typecheck},
-    DescriptorError,
 };
 
 #[cfg(test)]
@@ -40,7 +37,9 @@ mod test;
 type ParseResult<'a, T> =
     IResult<&'a str, Result<T, Vec<DescriptorError<'a>>>, ParseError<'a, DescriptorError<'a>>>;
 
-pub fn rules(full: &str) -> Result<HashMap<&str, Vec<RuleDef>>, ParseError<DescriptorError>> {
+pub fn rules(
+    full: &str,
+) -> Result<HashMap<&str, Vec<RuleDefUntyped>>, ParseError<DescriptorError>> {
     let mut map = Some(Ok(HashMap::new()));
     all_consuming(fold_many0_accumulate(
         cs(|input| rule(full, input)),
@@ -55,7 +54,7 @@ pub fn rules(full: &str) -> Result<HashMap<&str, Vec<RuleDef>>, ParseError<Descr
     .map(|(_, e)| e.map_err(Into::into))?
 }
 
-fn rule<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleDef<'a>> {
+fn rule<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleDefUntyped<'a>> {
     pair(
         |input| reference(full, input),
         delimited(
@@ -65,7 +64,7 @@ fn rule<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleDef<'a>> {
         ),
     )
     .map(|(a, b)| merge_tuple(a, b))
-    .map_ok(|(reference, body)| RuleDef { reference, body })
+    .map_ok(|(reference, body)| RuleDefUntyped { reference, body })
     .parse(input)
 }
 
@@ -107,7 +106,7 @@ fn compare<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'
             )
             .map(|(c, n)| c.map(|c| (c, n)))
             .map_ok(|(c, n)| RuleBodyTruthy::Compare(Box::new(c), n))
-            .map_ok(RuleBody::Truthy);
+            .map_ok(RuleBodyUntyped::Truthy);
 
             span_ok(full, reparse)
                 .map(|r| r.and_then(typecheck::<T>))
@@ -132,7 +131,7 @@ fn comb_start<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResul
     }
 }
 
-fn county_comb<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Span<RuleBody<'a>>> {
+fn county_comb<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Span<RuleBodyUntyped<'a>>> {
     span_ok(
         full,
         separated_list1_accumulate(
@@ -142,7 +141,7 @@ fn county_comb<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Span<RuleBo
         ),
     )
     .map_ok(|c| c.map(RuleBodyCounty::LinearComb))
-    .map_ok(|c| c.map(RuleBody::County))
+    .map_ok(|c| c.map(RuleBodyUntyped::County))
     .parse(input)
 }
 
@@ -152,8 +151,8 @@ fn item<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, 
         alt((
             delimited(char('('), cs(|input| expr::<T>(full, input)), char(')'))
                 .map_ok(T::to_rule_body),
-            (|input| truthy_item(full, input)).map_ok(RuleBody::Truthy),
-            (|input| county_item(full, input)).map_ok(RuleBody::County),
+            (|input| truthy_item(full, input)).map_ok(RuleBodyUntyped::Truthy),
+            (|input| county_item(full, input)).map_ok(RuleBodyUntyped::County),
             (|input| reference(full, input))
                 .map_ok(T::reference)
                 .map_ok(T::to_rule_body),

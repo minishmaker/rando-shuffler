@@ -2,10 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::Span;
 
-use super::{
-    ast::{Reference, RuleBody, RuleBodyCounty, RuleBodyTruthy},
-    DescriptorError,
-};
+use super::ast::{DescriptorError, Reference, RuleBodyCounty, RuleBodyTruthy, RuleBodyUntyped};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DescriptorType {
@@ -26,7 +23,7 @@ impl Display for DescriptorType {
     }
 }
 
-impl RuleBody<'_> {
+impl RuleBodyUntyped<'_> {
     fn descriptor_type(&self) -> DescriptorType {
         match self {
             Self::Truthy(_) => DescriptorType::Truthy,
@@ -38,10 +35,10 @@ impl RuleBody<'_> {
 
 pub trait Typecheck<'a> {
     fn descriptor_type() -> DescriptorType;
-    fn extract(val: RuleBody<'a>) -> Result<Self, RuleBody<'a>>
+    fn extract(val: RuleBodyUntyped<'a>) -> Result<Self, RuleBodyUntyped<'a>>
     where
         Self: Sized;
-    fn to_rule_body(self) -> RuleBody<'a>;
+    fn to_rule_body(self) -> RuleBodyUntyped<'a>;
     fn and(v: Vec<Self>) -> Self
     where
         Self: Sized;
@@ -58,16 +55,16 @@ impl<'a> Typecheck<'a> for RuleBodyTruthy<'a> {
         DescriptorType::Truthy
     }
 
-    fn extract(val: RuleBody<'a>) -> Result<Self, RuleBody<'a>> {
-        if let RuleBody::Truthy(t) = val {
+    fn extract(val: RuleBodyUntyped<'a>) -> Result<Self, RuleBodyUntyped<'a>> {
+        if let RuleBodyUntyped::Truthy(t) = val {
             Ok(t)
         } else {
             Err(val)
         }
     }
 
-    fn to_rule_body(self) -> RuleBody<'a> {
-        RuleBody::Truthy(self)
+    fn to_rule_body(self) -> RuleBodyUntyped<'a> {
+        RuleBodyUntyped::Truthy(self)
     }
 
     fn and(v: Vec<Self>) -> Self {
@@ -88,16 +85,16 @@ impl<'a> Typecheck<'a> for RuleBodyCounty<'a> {
         DescriptorType::County
     }
 
-    fn extract(val: RuleBody<'a>) -> Result<Self, RuleBody<'a>> {
+    fn extract(val: RuleBodyUntyped<'a>) -> Result<Self, RuleBodyUntyped<'a>> {
         match val {
-            RuleBody::County(c) => Ok(c),
-            RuleBody::Reference(r) => Ok(RuleBodyCounty::Reference(r)),
+            RuleBodyUntyped::County(c) => Ok(c),
+            RuleBodyUntyped::Reference(r) => Ok(RuleBodyCounty::Reference(r)),
             val => Err(val),
         }
     }
 
-    fn to_rule_body(self) -> RuleBody<'a> {
-        RuleBody::County(self)
+    fn to_rule_body(self) -> RuleBodyUntyped<'a> {
+        RuleBodyUntyped::County(self)
     }
 
     fn and(v: Vec<Self>) -> Self {
@@ -113,16 +110,16 @@ impl<'a> Typecheck<'a> for RuleBodyCounty<'a> {
     }
 }
 
-impl<'a> Typecheck<'a> for RuleBody<'a> {
+impl<'a> Typecheck<'a> for RuleBodyUntyped<'a> {
     fn descriptor_type() -> DescriptorType {
         DescriptorType::Unknown
     }
 
-    fn extract(val: RuleBody<'a>) -> Result<Self, RuleBody<'a>> {
+    fn extract(val: RuleBodyUntyped<'a>) -> Result<Self, RuleBodyUntyped<'a>> {
         Ok(val)
     }
 
-    fn to_rule_body(self) -> RuleBody<'a> {
+    fn to_rule_body(self) -> RuleBodyUntyped<'a> {
         self
     }
 
@@ -140,7 +137,7 @@ impl<'a> Typecheck<'a> for RuleBody<'a> {
 }
 
 pub fn typecheck<'a, T: Typecheck<'a>>(
-    r: Span<RuleBody<'a>>,
+    r: Span<RuleBodyUntyped<'a>>,
 ) -> Result<T, Vec<DescriptorError<'a>>> {
     let Span(s, r, l) = r;
 

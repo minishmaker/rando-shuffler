@@ -1,0 +1,21 @@
+name: Test
+version: 0.0.1
+provides:
+  descriptors:
+    example:
+      export: default
+      stateful: true
+      params: [scoped]
+      type: Truthy
+      consumes:
+        key: exampleKey
+        lock: exampleLock
+    exampleKey:
+      type: County
+      params: [scoped]
+  descriptor-definitions:
+    - example.logicdsc
+  logic:
+    - "**/*.logic"
+  data:
+    - data/example.json
