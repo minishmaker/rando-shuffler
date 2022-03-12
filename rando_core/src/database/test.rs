@@ -293,7 +293,7 @@ impl<V: Clone + Hash + Eq> Descriptor<V> for RelationDescriptor<'_, V> {
         r: impl Fn(&str, &[V]) -> R,
         _a: impl Fn(&str, &[V]) -> R,
         _comp: impl Fn(&Self::County, Ntgr) -> R,
-        ex: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
+        ex: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
         _conj: impl Fn(R, &Self::Truthy) -> R,
         _disj: impl Fn(R, &Self::Truthy) -> R,
         _prio: impl Fn(&[(bool, V)]) -> R,
@@ -324,7 +324,7 @@ impl<V: Clone + Hash + Eq> Descriptor<V> for RelationDescriptor<'_, V> {
         _comb: impl Fn(R, &Self::County, Ntgr) -> R,
         _min: impl Fn(R, &Self::County) -> R,
         _max: impl Fn(R, &Self::County) -> R,
-        _ct: impl Fn(&str, ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
+        _ct: impl Fn(&str, ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
     ) -> R {
         c(Ntgr::Infinity)
     }

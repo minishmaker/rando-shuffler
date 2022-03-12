@@ -17,7 +17,7 @@ pub trait Descriptor<V> {
         r: impl Fn(&str, &[V]) -> R,
         a: impl Fn(&str, &[V]) -> R,
         comp: impl Fn(&Self::County, Ntgr) -> R,
-        ex: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
+        ex: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
         conj: impl Fn(R, &Self::Truthy) -> R,
         disj: impl Fn(R, &Self::Truthy) -> R,
         prio: impl Fn(&[(bool, V)]) -> R,
@@ -32,7 +32,7 @@ pub trait Descriptor<V> {
         comb: impl Fn(R, &Self::County, Ntgr) -> R,
         min: impl Fn(R, &Self::County) -> R,
         max: impl Fn(R, &Self::County) -> R,
-        ct: impl Fn(&str, ShufflePattern<V, V>, &dyn Fn(&V) -> Self::Truthy) -> R,
+        ct: impl Fn(&str, ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
     ) -> R;
 }
 

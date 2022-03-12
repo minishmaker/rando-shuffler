@@ -303,14 +303,14 @@ where
             self.eval_descriptor_county::<D1>(cache_ref, c, v, cache)
                 .map(|c| County::ge(&c, n))
         };
-        let exists = |n: &str, p: &ShufflePattern<V, V>, f: &dyn Fn(&_) -> _| {
+        let exists = |n: &str, p: &ShufflePattern<V, V>, f: &dyn Fn(_) -> _| {
             let shuffle = self.shuffles.get(n).ok_or(())?;
             let cache = &mut *cache.borrow_mut();
             cache.add_shuffle_dependency(n.to_string(), p.clone(), cache_ref);
             p.apply(shuffle)
                 .into_inner()
                 .into_iter()
-                .map(|v| f(&v))
+                .map(f)
                 .map(|t| self.eval_descriptor_truthy::<D1>(cache_ref, &t, v, cache))
                 .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
         };
@@ -367,14 +367,14 @@ where
             let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, cache)?;
             Ok(a.join(&b))
         };
-        let count = |n: &str, p: ShufflePattern<V, V>, f: &dyn Fn(&_) -> _| {
+        let count = |n: &str, p: ShufflePattern<V, V>, f: &dyn Fn(_) -> _| {
             let shuffle = self.shuffles.get(n).ok_or(())?;
             let cache = &mut *cache.borrow_mut();
             cache.add_shuffle_dependency(n.to_string(), p.clone(), cache_ref);
             p.apply(shuffle)
                 .into_inner()
                 .into_iter()
-                .map(|v| f(&v))
+                .map(f)
                 .map(|t| self.eval_descriptor_truthy::<D1>(cache_ref, &t, v, cache))
                 .try_fold(C::top(), |a, b| b.map(|b| a.add(&C::lift(&b))))
         };
