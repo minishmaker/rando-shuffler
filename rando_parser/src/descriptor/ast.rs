@@ -52,7 +52,7 @@ pub enum RuleBodyCounty<'a> {
     Min(Vec<RuleBodyCounty<'a>>),
     Max(Vec<RuleBodyCounty<'a>>),
     Count(
-        Span<Ident<'a>>,
+        Span<Value<'a>>,
         Relation<'a>,
         Span<Value<'a>>,
         Box<RuleBodyTruthy<'a>>,
@@ -66,7 +66,7 @@ pub enum RuleBodyTruthy<'a> {
     Access(Reference<'a>),
     Compare(Box<RuleBodyCounty<'a>>, Ntgr),
     Exists(
-        Span<Ident<'a>>,
+        Span<Value<'a>>,
         Relation<'a>,
         Span<Value<'a>>,
         Box<RuleBodyTruthy<'a>>,

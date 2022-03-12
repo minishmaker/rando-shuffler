@@ -187,14 +187,14 @@ fn exists<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyTruthy<'
     preceded(
         one_of("?∃"),
         tuple((
-            cs(span_ok(full, variable)),
+            cs(span_ok(full, value_name)),
             |input| relation(full, input),
             cs(span_ok(full, value_name)),
             delimited(char('('), |input| expr(full, input), char(')')),
         )),
     )
-    .map(|(var, r, val, rule)| merge_tuple(merge_tuple(var, r), merge_tuple(val, rule)))
-    .map_ok(|((var, r), (val, rule))| RuleBodyTruthy::Exists(var, r, val, Box::new(rule)))
+    .map(|(a, r, b, rule)| merge_tuple(merge_tuple(a, r), merge_tuple(b, rule)))
+    .map_ok(|((a, r), (b, rule))| RuleBodyTruthy::Exists(a, r, b, Box::new(rule)))
     .parse(input)
 }
 
@@ -202,7 +202,7 @@ fn count<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyCounty<'a
     preceded(
         char('+'),
         tuple((
-            cs(span_ok(full, variable)),
+            cs(span_ok(full, value_name)),
             |input| relation(full, input),
             cs(span_ok(full, value_name)),
             delimited(char('('), |input| expr(full, input), char(')')),
@@ -267,12 +267,9 @@ fn oolean(input: &str) -> ParseResult<Oolean> {
 }
 
 fn ntgr(input: &str) -> ParseResult<Ntgr> {
-    alt((
-        tag("inf").map(|_| Ntgr::Infinity),
-        u32.map(|n| Ntgr::Num(n)),
-    ))
-    .map(Ok)
-    .parse(input)
+    alt((tag("inf").map(|_| Ntgr::Infinity), u32.map(Ntgr::Num)))
+        .map(Ok)
+        .parse(input)
 }
 
 fn state_body(input: &str) -> ParseResult<StateBody> {
