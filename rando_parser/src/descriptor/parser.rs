@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use nom::{
     branch::alt,
@@ -45,7 +45,7 @@ pub fn rules(
         cs(|input| rule(full, input)),
         move || map.take().unwrap(),
         |mut m, r| {
-            let keyword = r.reference.keyword.inner();
+            let keyword = r.reference.keyword.into_inner();
             m.entry(keyword).or_insert_with(Vec::new).push(r);
             m
         },
@@ -124,7 +124,7 @@ fn comb_start<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResul
 
     match initial.parse(input) {
         // Without * or +, just pass the value along
-        Ok((input, (item, None))) => Ok((input, item.map(Span::inner))),
+        Ok((input, (item, None))) => Ok((input, item.map(Span::into_inner))),
         // Restart parsing for a linear combination
         Ok(_) => county_comb(full, input).map(|(i, r)| (i, r.and_then(typecheck::<T>))),
         Err(e) => Err(e),
@@ -194,7 +194,7 @@ fn exists<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyTruthy<'
         )),
     )
     .map(|(a, r, b, rule)| merge_tuple(merge_tuple(a, r), merge_tuple(b, rule)))
-    .map_ok(|((a, r), (b, rule))| RuleBodyTruthy::Exists(a, r, b, Box::new(rule)))
+    .map_ok(|((a, r), (b, rule))| RuleBodyTruthy::Exists(a, r, b, Rc::new(rule)))
     .parse(input)
 }
 
@@ -208,8 +208,8 @@ fn count<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyCounty<'a
             delimited(char('('), |input| expr(full, input), char(')')),
         )),
     )
-    .map(|(var, r, val, rule)| merge_tuple(merge_tuple(var, r), merge_tuple(val, rule)))
-    .map_ok(|((var, r), (val, rule))| RuleBodyCounty::Count(var, r, val, Box::new(rule)))
+    .map(|(a, r, b, rule)| merge_tuple(merge_tuple(a, r), merge_tuple(b, rule)))
+    .map_ok(|((a, r), (b, rule))| RuleBodyCounty::Count(a, r, b, Rc::new(rule)))
     .parse(input)
 }
 

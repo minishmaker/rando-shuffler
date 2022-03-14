@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use rando_core::algebra::{Ntgr, Oolean};
 
@@ -55,7 +57,7 @@ pub enum RuleBodyCounty<'a> {
         Span<Value<'a>>,
         Relation<'a>,
         Span<Value<'a>>,
-        Box<RuleBodyTruthy<'a>>,
+        Rc<RuleBodyTruthy<'a>>,
     ),
 }
 
@@ -69,7 +71,7 @@ pub enum RuleBodyTruthy<'a> {
         Span<Value<'a>>,
         Relation<'a>,
         Span<Value<'a>>,
-        Box<RuleBodyTruthy<'a>>,
+        Rc<RuleBodyTruthy<'a>>,
     ),
     And(Vec<RuleBodyTruthy<'a>>),
     Or(Vec<RuleBodyTruthy<'a>>),
@@ -107,7 +109,7 @@ impl<'a> RandoError<'a> for DescriptorError<'a> {
                     .with_message(format!(
                         "Type error: expected {}, found {}",
                         expected,
-                        actual.inner()
+                        actual.into_inner()
                     ))
                     .with_labels(labels)
             }

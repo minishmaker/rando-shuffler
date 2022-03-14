@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::ops::{Deref, DerefMut, Range};
 
 use nom::{IResult, Parser};
 
@@ -25,12 +25,25 @@ impl<T> Span<T> {
         Span(self.0, f(self.1), self.2)
     }
 
-    pub fn inner(self) -> T {
+    pub fn into_inner(self) -> T {
         self.1
     }
 
     pub fn range(&self) -> Range<usize> {
         self.0..self.2
+    }
+}
+
+impl<T> Deref for Span<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.1
+    }
+}
+
+impl<T> DerefMut for Span<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.1
     }
 }
 
