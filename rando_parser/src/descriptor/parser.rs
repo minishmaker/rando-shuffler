@@ -194,7 +194,7 @@ fn exists<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyTruthy<'
         )),
     )
     .map(|(a, r, b, rule)| merge_tuple(merge_tuple(a, r), merge_tuple(b, rule)))
-    .map_ok(|((a, r), (b, rule))| RuleBodyTruthy::Exists(a, r, b, Rc::new(rule)))
+    .map_ok(|((a, r), (b, rule))| RuleBodyTruthy::Exists(a, r, b, Box::new(rule)))
     .parse(input)
 }
 
@@ -209,7 +209,7 @@ fn count<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyCounty<'a
         )),
     )
     .map(|(a, r, b, rule)| merge_tuple(merge_tuple(a, r), merge_tuple(b, rule)))
-    .map_ok(|((a, r), (b, rule))| RuleBodyCounty::Count(a, r, b, Rc::new(rule)))
+    .map_ok(|((a, r), (b, rule))| RuleBodyCounty::Count(a, r, b, Box::new(rule)))
     .parse(input)
 }
 

@@ -57,7 +57,7 @@ pub enum RuleBodyCounty<'a> {
         Span<Value<'a>>,
         Relation<'a>,
         Span<Value<'a>>,
-        Rc<RuleBodyTruthy<'a>>,
+        Box<RuleBodyTruthy<'a>>,
     ),
 }
 
@@ -71,7 +71,7 @@ pub enum RuleBodyTruthy<'a> {
         Span<Value<'a>>,
         Relation<'a>,
         Span<Value<'a>>,
-        Rc<RuleBodyTruthy<'a>>,
+        Box<RuleBodyTruthy<'a>>,
     ),
     And(Vec<RuleBodyTruthy<'a>>),
     Or(Vec<RuleBodyTruthy<'a>>),
