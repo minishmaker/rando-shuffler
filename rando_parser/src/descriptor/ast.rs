@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use rando_core::algebra::{Ntgr, Oolean};
 
