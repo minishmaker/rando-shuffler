@@ -367,7 +367,7 @@ where
             let b = self.eval_descriptor_county::<D1>(cache_ref, b, v, cache)?;
             Ok(a.join(&b))
         };
-        let count = |n: &str, p: ShufflePattern<V, V>, f: &dyn Fn(_) -> _| {
+        let count = |n: &str, p: &ShufflePattern<V, V>, f: &dyn Fn(_) -> _| {
             let shuffle = self.shuffles.get(n).ok_or(())?;
             let cache = &mut *cache.borrow_mut();
             cache.add_shuffle_dependency(n.to_string(), p.clone(), cache_ref);

@@ -32,7 +32,7 @@ pub trait Descriptor<V> {
         comb: impl Fn(R, &Self::County, Ntgr) -> R,
         min: impl Fn(R, &Self::County) -> R,
         max: impl Fn(R, &Self::County) -> R,
-        ct: impl Fn(&str, ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
+        ct: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
     ) -> R;
 }
 
