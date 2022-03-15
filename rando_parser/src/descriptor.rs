@@ -215,7 +215,7 @@ impl<'a: 'b, 'b> Descriptor<FullIdent<'a>> for &'b RuleDef<'a> {
             RuleBodyCounty::Max(v) => eval_combine(map, constant(Ntgr::Num(0)), v.iter(), max),
             RuleBodyCounty::Min(v) => eval_combine(map, constant(Ntgr::Num(0)), v.iter(), min),
             RuleBodyCounty::Reference(r) => {
-                let values = r.resolve_values(&map, values);
+                let values = r.resolve_values(map, values);
                 reference(*r.keyword, &values[..])
             }
         }
