@@ -249,21 +249,16 @@ fn eval_qualified<'a: 'b, 'b, R>(
     let a = a.resolve(map, values);
     let b = b.resolve(map, values);
 
+    let flip = b.is_ok();
     let (pattern, ident) = match (a, b) {
         (Ok(a), Ok(b)) => (ShufflePattern::Both(a, b), None),
         (Err(a), Err(b)) => panic!("Both {} and {} are variables", a, b),
-        (Ok(a), Err(i)) => {
-            if r.left_to_right {
-                (ShufflePattern::A(a), Some(i))
+        (Ok(v), Err(i)) | (Err(i), Ok(v)) => {
+            // Swap directions if the right is chosen
+            if flip ^ r.left_to_right {
+                (ShufflePattern::A(v), Some(i))
             } else {
-                (ShufflePattern::B(a), Some(i))
-            }
-        }
-        (Err(i), Ok(b)) => {
-            if r.left_to_right {
-                (ShufflePattern::B(b), Some(i))
-            } else {
-                (ShufflePattern::A(b), Some(i))
+                (ShufflePattern::B(v), Some(i))
             }
         }
     };
