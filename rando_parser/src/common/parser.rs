@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag},
-    character::complete::{alphanumeric1, char, multispace0, space0},
+    bytes::complete::{is_not, tag, take_until},
+    character::complete::{alphanumeric1, char, line_ending, multispace1, not_line_ending, space0},
     combinator::{consumed, map_res, recognize},
     error::{ErrorKind, FromExternalError, ParseError},
     multi::{many0, separated_list1},
@@ -82,14 +82,25 @@ pub fn escaped_ident<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&str
 }
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
-/// trailing whitespace, returning the output of `inner`.
-pub fn ws<'a: 'b, 'b, F: 'b, O, E: ParseError<&'a str>>(
+/// trailing whitespace and comments, returning the output of `inner`.
+pub fn cs<'a: 'b, 'b, F: 'b, O, E: ParseError<&'a str>>(
     inner: F,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
 where
     F: FnMut(&'a str) -> IResult<&'a str, O, E>,
 {
-    delimited(multispace0, inner, multispace0)
+    fn comment<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
+        alt((
+            delimited(tag("/*"), take_until("*/"), tag("*/")),
+            delimited(tag("//"), not_line_ending, line_ending),
+        ))(input)
+    }
+
+    delimited(
+        many0(alt((multispace1, comment))),
+        inner,
+        many0(alt((multispace1, comment))),
+    )
 }
 
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and

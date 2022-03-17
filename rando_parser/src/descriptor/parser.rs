@@ -2,13 +2,9 @@ use std::collections::HashMap;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until},
-    character::complete::{
-        alpha1, char, line_ending, multispace1, not_line_ending, one_of, space0, u32,
-    },
+    bytes::complete::tag,
+    character::complete::{alpha1, char, line_ending, one_of, space0, u32},
     combinator::{all_consuming, eof, not, opt, value},
-    error::ParseError as NomParseError,
-    multi::many0,
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult, Parser,
 };
@@ -19,7 +15,7 @@ use crate::{
             fold_many0_accumulate, merge_tuple, separated_list0_accumulate,
             separated_list1_accumulate, ParseError, ParseExt,
         },
-        parser::{full_ident, ident_part, keyword, relation_name},
+        parser::{cs, full_ident, ident_part, keyword, relation_name},
         span::{span, span_ok, Span},
     },
     Ident,
@@ -300,26 +296,4 @@ fn value_name(input: &str) -> ParseResult<Value> {
 
 fn variable(input: &str) -> ParseResult<Ident> {
     preceded(char('v'), ident_part).map(Ok).parse(input)
-}
-
-/// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
-/// trailing whitespace and comments, returning the output of `inner`.
-pub fn cs<'a: 'b, 'b, F: 'b, O, E: NomParseError<&'a str>>(
-    inner: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
-where
-    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
-{
-    fn comment<'a, E: NomParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-        alt((
-            delimited(tag("/*"), take_until("*/"), tag("*/")),
-            delimited(tag("//"), not_line_ending, line_ending),
-        ))(input)
-    }
-
-    delimited(
-        many0(alt((multispace1, comment))),
-        inner,
-        many0(alt((multispace1, comment))),
-    )
 }
