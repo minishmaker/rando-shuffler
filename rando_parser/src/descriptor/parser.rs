@@ -7,7 +7,7 @@ use nom::{
         alpha1, char, line_ending, multispace1, not_line_ending, one_of, space0, u32,
     },
     combinator::{all_consuming, eof, not, opt, value},
-    error::{ParseError as NomParseError},
+    error::ParseError as NomParseError,
     multi::many0,
     sequence::{delimited, pair, preceded, terminated, tuple},
     Finish, IResult, Parser,
@@ -16,10 +16,11 @@ use nom::{
 use crate::{
     common::{
         error::{
-            fold_many0_accumulate, separated_list1_accumulate, ParseError, ParseExt, separated_list0_accumulate, merge_tuple,
+            fold_many0_accumulate, merge_tuple, separated_list0_accumulate,
+            separated_list1_accumulate, ParseError, ParseExt,
         },
         parser::{full_ident, ident_part, keyword, relation_name},
-        span::{span, Span, span_ok},
+        span::{span, span_ok, Span},
     },
     Ident,
 };
@@ -36,7 +37,8 @@ use super::{
 #[cfg(test)]
 mod test;
 
-type ParseResult<'a, T> = IResult<&'a str, Result<T, Vec<DescriptorError<'a>>>, ParseError<'a, DescriptorError<'a>>>;
+type ParseResult<'a, T> =
+    IResult<&'a str, Result<T, Vec<DescriptorError<'a>>>, ParseError<'a, DescriptorError<'a>>>;
 
 pub fn rules<'a>(
     full: &'a str,
@@ -62,11 +64,11 @@ fn rule<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleDef<'a>> {
             cs(char('=')),
             |input| expr(full, input),
             preceded(space0, alt((line_ending, eof))),
-        )
+        ),
     )
-        .map(|(a, b)| merge_tuple(a, b))
-        .map_ok(|(reference, body)| RuleDef { reference, body })
-        .parse(input)
+    .map(|(a, b)| merge_tuple(a, b))
+    .map_ok(|(reference, body)| RuleDef { reference, body })
+    .parse(input)
 }
 
 fn expr<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, T> {
@@ -96,23 +98,25 @@ fn and<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, T
 fn compare<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, T> {
     pair(
         |input| comb_start::<T>(full, input),
-        opt(preceded(cs(tag(">=")), u32))
+        opt(preceded(cs(tag(">=")), u32)),
     )
-        .parse(input)
-        .and_then(|(i, (t, c))| match c {
-            Some(_) => {
-                let reparse =  pair(
-                    |input| comb_start::<RuleBodyCounty>(full, input),
-                    preceded(cs(tag(">=")), u32)
-                ).map(|(c, n)| c.map(|c| (c, n)))
-                    .map_ok(|(c, n)| RuleBodyTruthy::Compare(Box::new(c), n))
-                    .map_ok(RuleBody::Truthy);
+    .parse(input)
+    .and_then(|(i, (t, c))| match c {
+        Some(_) => {
+            let reparse = pair(
+                |input| comb_start::<RuleBodyCounty>(full, input),
+                preceded(cs(tag(">=")), u32),
+            )
+            .map(|(c, n)| c.map(|c| (c, n)))
+            .map_ok(|(c, n)| RuleBodyTruthy::Compare(Box::new(c), n))
+            .map_ok(RuleBody::Truthy);
 
-                span_ok(full, reparse).map(|r| r.and_then(typecheck::<T>))
-                    .parse(input)
-            }
-            None => Ok((i, t)),
-        })
+            span_ok(full, reparse)
+                .map(|r| r.and_then(typecheck::<T>))
+                .parse(input)
+        }
+        None => Ok((i, t)),
+    })
 }
 
 fn comb_start<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, T> {
@@ -125,25 +129,18 @@ fn comb_start<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResul
         // Without * or +, just pass the value along
         Ok((input, (item, None))) => Ok((input, item.map(Span::inner))),
         // Restart parsing for a linear combination
-        Ok(_) => county_comb(full, input)
-                .map(|(i, r)| (i, r.and_then(typecheck::<T>))),
+        Ok(_) => county_comb(full, input).map(|(i, r)| (i, r.and_then(typecheck::<T>))),
         Err(e) => Err(e),
     }
 }
 
-fn county_comb<'a>(
-    full: &'a str,
-    input: &'a str,
-) -> ParseResult<'a, Span<RuleBody<'a>>> {
+fn county_comb<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Span<RuleBody<'a>>> {
     span_ok(
         full,
         separated_list1_accumulate(
             cs(char('+')).map(Ok),
-            pair(
-                |input| item(full, input),
-                opt(preceded(cs(char('*')), u32))
-            )
-                .map(|(i, v)| i.map(|i|(i, v.unwrap_or(1)))),
+            pair(|input| item(full, input), opt(preceded(cs(char('*')), u32)))
+                .map(|(i, v)| i.map(|i| (i, v.unwrap_or(1)))),
         ),
     )
     .map_ok(|c| c.map(RuleBodyCounty::LinearComb))
@@ -163,15 +160,15 @@ fn item<'a, T: Typecheck<'a>>(full: &'a str, input: &'a str) -> ParseResult<'a, 
                 .map_ok(T::reference)
                 .map_ok(T::to_rule_body),
         )),
-    ).map(|r| r.and_then(typecheck::<T>))
+    )
+    .map(|r| r.and_then(typecheck::<T>))
     .parse(input)
 }
 
 fn county_item<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyCounty<'a>> {
-    alt((
-        u32.map(RuleBodyCounty::Constant).map(Ok),
-        |input| count(full, input)
-    ))(input)
+    alt((u32.map(RuleBodyCounty::Constant).map(Ok), |input| {
+        count(full, input)
+    }))(input)
 }
 
 fn truthy_item<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, RuleBodyTruthy<'a>> {
@@ -218,10 +215,12 @@ fn relation<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Relation<'a>> 
         delimited(tag("<-"), cs(span(full, relation_name)), char('-')).map(|s| (s, false)),
         delimited(char('-'), cs(span(full, relation_name)), tag("->")).map(|s| (s, true)),
     ))
-    .map(|(rel, ltr)| Ok(Relation {
-        name: rel,
-        left_to_right: ltr,
-    }))
+    .map(|(rel, ltr)| {
+        Ok(Relation {
+            name: rel,
+            left_to_right: ltr,
+        })
+    })
     .parse(input)
 }
 
@@ -259,8 +258,9 @@ fn oolean(input: &str) -> ParseResult<Oolean> {
             value(Oolean::False, tag("false")),
         )),
         not(alpha1),
-    ).map(Ok)
-        .parse(input)
+    )
+    .map(Ok)
+    .parse(input)
 }
 
 fn state_body(input: &str) -> ParseResult<StateBody> {
@@ -291,8 +291,11 @@ fn reference<'a>(full: &'a str, input: &'a str) -> ParseResult<'a, Reference<'a>
 }
 
 fn value_name(input: &str) -> ParseResult<Value> {
-    alt((variable.map_ok(Value::Var), full_ident.map(Value::Const).map(Ok)))
-        .parse(input)
+    alt((
+        variable.map_ok(Value::Var),
+        full_ident.map(Value::Const).map(Ok),
+    ))
+    .parse(input)
 }
 
 fn variable(input: &str) -> ParseResult<Ident> {

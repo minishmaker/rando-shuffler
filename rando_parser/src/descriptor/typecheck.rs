@@ -139,11 +139,15 @@ impl<'a> Typecheck<'a> for RuleBody<'a> {
     }
 }
 
-pub fn typecheck<'a, T: Typecheck<'a>>(r: Span<RuleBody<'a>>) -> Result<T, Vec<DescriptorError<'a>>> {
+pub fn typecheck<'a, T: Typecheck<'a>>(
+    r: Span<RuleBody<'a>>,
+) -> Result<T, Vec<DescriptorError<'a>>> {
     let Span(s, r, l) = r;
 
-    T::extract(r).map_err(|e| vec![DescriptorError::Type {
-        actual: Span(s, e.descriptor_type(), l),
-        expected: T::descriptor_type(),
-    }])
+    T::extract(r).map_err(|e| {
+        vec![DescriptorError::Type {
+            actual: Span(s, e.descriptor_type(), l),
+            expected: T::descriptor_type(),
+        }]
+    })
 }

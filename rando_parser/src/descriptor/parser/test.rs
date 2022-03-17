@@ -36,7 +36,10 @@ fn test_expr() {
     });
 
     let parser = |input| expr::<RuleBodyCounty>(input, input);
-    assert_matches!(parser("1 ; 2, 4 ; 3 "), Ok((" ", Ok(RuleBodyCounty::Max(_)))));
+    assert_matches!(
+        parser("1 ; 2, 4 ; 3 "),
+        Ok((" ", Ok(RuleBodyCounty::Max(_))))
+    );
     assert_matches!(parser("true ; false, true ; ool "), Ok((" ", Err(e))) => {
         assert_eq!(e.len(), 4);
         for e in &e[..] {
@@ -148,7 +151,10 @@ fn test_item() {
 
     // Truthy
     let parser = |input| item::<RuleBodyTruthy>(input, input);
-    assert_matches!(parser("ref() "), Ok((" ", Ok(RuleBodyTruthy::Reference(_)))));
+    assert_matches!(
+        parser("ref() "),
+        Ok((" ", Ok(RuleBodyTruthy::Reference(_))))
+    );
     assert_matches!(
         parser("true "),
         Ok((" ", Ok(RuleBodyTruthy::Constant(Oolean::True))))
@@ -166,7 +172,10 @@ fn test_item() {
 
     // County
     let parser = |input| item::<RuleBodyCounty>(input, input);
-    assert_matches!(parser("ref() "), Ok((" ", Ok(RuleBodyCounty::Reference(_)))));
+    assert_matches!(
+        parser("ref() "),
+        Ok((" ", Ok(RuleBodyCounty::Reference(_))))
+    );
     assert_matches!(parser("12 "), Ok((" ", Ok(RuleBodyCounty::Constant(12)))));
     assert_matches!(parser("true "), Ok((" ", Err(e))) => {
         assert_matches!(&e[..], [DescriptorError::Type {

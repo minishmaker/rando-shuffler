@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use codespan_reporting::diagnostic::Diagnostic;
-use nom::{branch::alt, bytes::complete::tag, Err as NomErr, combinator::map_res, Parser};
+use nom::{branch::alt, bytes::complete::tag, combinator::map_res, Err as NomErr, Parser};
 
 use super::error::{many0_accumulate, CommonError, RandoError};
 
