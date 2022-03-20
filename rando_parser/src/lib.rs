@@ -3,6 +3,7 @@ use std::fmt::{self, Display, Formatter};
 mod common;
 pub mod descriptor;
 pub mod logic;
+pub mod shuffle;
 
 pub use common::span::Span;
 

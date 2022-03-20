@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_until},
     character::complete::{alphanumeric1, char, line_ending, multispace1, not_line_ending, space0},
-    combinator::{consumed, map_res, recognize},
+    combinator::{consumed, map_res, recognize, verify},
     error::{ErrorKind, FromExternalError, ParseError},
     multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded},
@@ -17,7 +17,22 @@ pub fn relation_name<'a, E>(input: &'a str) -> IResult<&str, &str, E>
 where
     E: ParseError<&'a str>,
 {
-    recognize(many0(alt((alphanumeric1, tag("_")))))(input)
+    verify(recognize(many0(alt((alphanumeric1, tag("_"))))), |name| {
+        ![
+            "from",
+            "to",
+            "take",
+            "map",
+            "connect",
+            "repeat",
+            "separately",
+            "union",
+            "match",
+            "in",
+            "data",
+        ]
+        .contains(name)
+    })(input)
 }
 
 pub fn keyword<'a, E>(input: &'a str) -> IResult<&str, &str, E>

@@ -297,6 +297,32 @@ where
     }
 }
 
+pub fn fold_separated_list0_accumulate<'a, A, T, O, E, F, G, H, C>(
+    mut sep: G,
+    mut f: F,
+    mut init: H,
+    mut comb: C,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Result<A, Vec<E>>, ParseError<'a, E>>
+where
+    E: RandoError<'a>,
+    F: Parser<&'a str, Result<T, Vec<E>>, ParseError<'a, E>>,
+    G: Parser<&'a str, Result<O, Vec<E>>, ParseError<'a, E>>,
+    H: FnMut() -> Result<A, Vec<E>>,
+    C: FnMut(A, T) -> A,
+{
+    move |i| match f.parse(i) {
+        Err(NomErr::Error(_)) => Ok((i, init())),
+        Err(e) => Err(e),
+        Ok((i, first)) => {
+            let acc = init().and_then(|i| first.map(|f| comb(i, f)));
+            let parser = pair(|i| sep.parse(i), |i| f.parse(i))
+                .map(|(a, b)| merge_tuple(a, b))
+                .map_ok(|(_, b)| b);
+            accumulate_inner(parser, acc, &mut comb, i)
+        }
+    }
+}
+
 pub fn separated_list0_accumulate<'a, T, O, E, F, G>(
     mut sep: G,
     mut f: F,
