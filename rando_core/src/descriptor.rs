@@ -2,64 +2,109 @@ use crate::shuffles::ShufflePattern;
 
 use super::algebra::{Ntgr, Oolean};
 
-#[allow(clippy::too_many_arguments)]
-pub trait Descriptor<V> {
-    type Truthy;
-    type County;
-    fn eval<R, T, C>(&self, v: &[V], t: T, c: C) -> R
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DescRef<K, V>(pub K, pub Vec<V>);
+
+pub trait Descriptor<K, V> {
+    type Truthy<'a>
     where
-        T: Fn(&Self::Truthy, &[V]) -> R,
-        C: Fn(&Self::County, &[V]) -> R;
-    fn eval_truthy<R>(
-        body: &Self::Truthy,
-        values: &[V],
-        c: impl Fn(Oolean) -> R,
-        r: impl Fn(&str, &[V]) -> R,
-        a: impl Fn(&str, &[V]) -> R,
-        comp: impl Fn(&Self::County, Ntgr) -> R,
-        ex: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
-        conj: impl Fn(R, &Self::Truthy) -> R,
-        disj: impl Fn(R, &Self::Truthy) -> R,
-        prio: impl Fn(&[(bool, V)]) -> R,
-        post: impl Fn(&[(bool, V)]) -> R,
-    ) -> R;
+        Self: 'a;
+    type County<'a>;
+    fn eval<D: DescriptorEval<Self, K, V> + ?Sized>(&self, v: &[V], evaluator: &mut D)
+        -> D::Output;
+    fn eval_truthy<D: DescriptorEval<Self, K, V> + ?Sized>(
+        body: &Self::Truthy<'_>,
+        evaluator: &mut D,
+    ) -> D::Output;
 
-    fn eval_county<R>(
-        body: &Self::County,
-        values: &[V],
-        c: impl Fn(Ntgr) -> R,
-        r: impl Fn(&str, &[V]) -> R,
-        comb: impl Fn(R, &Self::County, Ntgr) -> R,
-        min: impl Fn(R, &Self::County) -> R,
-        max: impl Fn(R, &Self::County) -> R,
-        ct: impl Fn(&str, &ShufflePattern<V, V>, &dyn Fn(V) -> Self::Truthy) -> R,
-    ) -> R;
+    fn eval_county<D: DescriptorEval<Self, K, V> + ?Sized>(
+        body: &Self::County<'_>,
+        evaluator: &mut D,
+    ) -> D::Output;
 }
 
-/// Note: The concrete return types for these methods are unstable, pending GAT and existential types.
-/// It's only stable to use these as `impl Iterator + 'a`.
-pub trait Logic<V> {
+pub trait DescriptorEval<D: Descriptor<K, V> + ?Sized, K, V> {
+    type Output;
+
+    fn from_oolean(&mut self, oolean: Oolean) -> Self::Output;
+    fn truthy_ref(&mut self, reference: &DescRef<K, V>) -> Self::Output;
+    fn access(&mut self, reference: &DescRef<K, V>) -> Self::Output;
+    fn compare(&mut self, county: &D::County<'_>, n: Ntgr) -> Self::Output;
+    fn exists<'a, F>(
+        &mut self,
+        name: &K,
+        pattern: &ShufflePattern<V, V>,
+        generator: F,
+    ) -> Self::Output
+    where
+        D: 'a,
+        F: Fn(V) -> D::Truthy<'a> + 'a;
+    fn conjunction<'a, I>(&mut self, items: I) -> Self::Output
+    where
+        I: IntoIterator<Item = D::Truthy<'a>>,
+        D: 'a;
+    fn disjunction<'a, I>(&mut self, items: I) -> Self::Output
+    where
+        I: IntoIterator<Item = D::Truthy<'a>>,
+        D: 'a;
+    fn prior<I>(&mut self, items: I) -> Self::Output
+    where
+        I: IntoIterator<Item = (V, bool)>;
+    fn posterior<I>(&mut self, items: I) -> Self::Output
+    where
+        I: IntoIterator<Item = (V, bool)>;
+
+    fn from_ntgr(&mut self, ntgr: Ntgr) -> Self::Output;
+    fn county_ref(&mut self, reference: &DescRef<K, V>) -> Self::Output;
+    fn count<'a, F>(
+        &mut self,
+        name: &K,
+        pattern: &ShufflePattern<V, V>,
+        generator: F,
+    ) -> Self::Output
+    where
+        D: 'a,
+        F: Fn(V) -> D::Truthy<'a> + 'a;
+    fn min<'a, I>(&mut self, items: I) -> Self::Output
+    where
+        I: IntoIterator<Item = D::County<'a>>,
+        D: 'a;
+    fn max<'a, I>(&mut self, items: I) -> Self::Output
+    where
+        I: IntoIterator<Item = D::County<'a>>,
+        D: 'a;
+    fn linear_combination<'a, I>(&mut self, items: I) -> Self::Output
+    where
+        I: IntoIterator<Item = (D::County<'a>, Ntgr)>,
+        D: 'a;
+}
+
+/// Iterator associated types in these funcitons will eventually be replaced with trait method `impl Trait`
+pub trait Logic<K, V> {
     type Node: Clone;
-    type Descriptor: Descriptor<V>;
+    type Descriptor: Descriptor<K, V>;
 
-    fn list_nodes<'a>(&'a self) -> Box<dyn Iterator<Item = Self::Node> + 'a>;
-    fn edges<'a>(
-        &'a self,
-        source: &Self::Node,
-    ) -> Box<dyn Iterator<Item = Edge<'a, Self::Descriptor, Self::Node>> + 'a>;
-    fn access_nodes<'a>(
-        &'a self,
-        name: &str,
-        values: &[V],
-    ) -> Box<dyn Iterator<Item = Self::Node> + 'a>;
-}
+    type ListNodes<'a>: Iterator<Item = Self::Node>
+    where
+        Self: 'a;
+    fn list_nodes(&self) -> Self::ListNodes<'_>;
 
-pub struct Edge<'a, D, N> {
-    pub descriptor: &'a D,
-    pub ty: EdgeTy<N>,
-}
+    type AdjacentNodes<'a>: Iterator<Item = Option<Self::Node>>
+    where
+        Self: 'a;
+    /// Returns an iterator over all source nodes
+    fn adjacent_nodes(&self, dest: Self::Node) -> Self::AdjacentNodes<'_>;
 
-pub enum EdgeTy<N> {
-    FromNode(N),
-    FromTrue,
+    type AccessNodes<'a>: Iterator<Item = Self::Node>
+    where
+        Self: 'a;
+    fn access_nodes<'a>(&'a self, reference: &DescRef<K, V>) -> Self::AccessNodes<'a>;
+
+    fn eval_edge<R>(
+        &self,
+        edge: (Option<Self::Node>, Self::Node),
+        eval: impl FnMut(&DescRef<K, V>) -> R,
+        and: impl FnMut(Vec<R>) -> R,
+        or: impl FnMut(Vec<R>) -> R,
+    ) -> R;
 }

@@ -1,4 +1,7 @@
-use std::ops::{Add, Mul};
+use std::{
+    hash::Hash,
+    ops::{Add, Mul},
+};
 
 /// Truthy forms a lattice
 pub trait Truthy {
@@ -10,7 +13,8 @@ pub trait Truthy {
 }
 
 pub trait Sphery: Truthy {
-    fn increment(&self) -> Self;
+    /// increment(a) <= a
+    fn increment(self) -> Self;
 }
 
 pub trait County<T: Truthy>: Truthy {
@@ -29,8 +33,6 @@ pub trait County<T: Truthy>: Truthy {
     /// Scaling should probably make sense
     fn ge(&self, n: Ntgr) -> T;
 }
-
-pub trait Statey: Truthy {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Oolean {

@@ -128,6 +128,7 @@ impl<'a> Reference<'a> {
     }
 }
 
+/*
 impl<'a: 'b, 'b> Descriptor<FullIdent<'a>> for &'b RuleDef<'a> {
     type Truthy = (Rc<VarMap<'a, FullIdent<'a>>>, &'b RuleBodyTruthy<'a>);
     type County = (Rc<VarMap<'a, FullIdent<'a>>>, &'b RuleBodyCounty<'a>);
@@ -272,3 +273,4 @@ fn eval_qualified<'a: 'b, 'b, R>(
         (map, t)
     })
 }
+*/

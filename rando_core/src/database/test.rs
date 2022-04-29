@@ -4,7 +4,7 @@ use petgraph::{
 };
 
 use crate::{
-    algebra::{County, Ntgr, Oolean, Sphery, Statey, Truthy},
+    algebra::{County, Ntgr, Oolean, Sphery, Truthy},
     descriptor::{Descriptor, Edge, EdgeTy, Logic},
     shuffles::{Shuffle, ShuffleDelta, ShufflePattern},
 };
@@ -31,8 +31,8 @@ fn build_test_database<'a, T, C, L>(
     logic: L,
 ) -> impl Database<'a, RelationDescriptor<'a, &'a str>, L, &'a str, T, C, TestShuffle<'a>, Err = ()>
 where
-    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
-    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
+    T: Clone + Eq + PartialOrd + Truthy + Sphery,
+    C: Clone + Eq + PartialOrd + County<T> + Sphery,
     L: Logic<&'a str>,
     L::Node: Clone + Hash + Eq,
 {
@@ -358,7 +358,7 @@ impl Sphery for Oolean {
     }
 }
 
-impl Statey for Oolean {}
+//impl Statey for Oolean {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TestCounty {
@@ -443,7 +443,7 @@ impl Sphery for TestCounty {
     }
 }
 
-impl Statey for TestCounty {}
+//impl Statey for TestCounty {}
 
 impl PartialOrd for TestCounty {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

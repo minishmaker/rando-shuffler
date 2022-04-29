@@ -1,3 +1,28 @@
+A: root
+
+A -> B
+B -> A: gain S1
+B -> C: state S1
+C -> A: gain S2
+
+
+
+
+[B,A,C]   []
+[A,C]     []
+[C,B]     [0A]
+[B]       [0A]
+[A,C]     [0A,1B]
+[C,B]     [0A,2A!S1,1B]
+[B]       [0A,2A!S1,1B]
+[A,C]     [0A,2A!S1,1B,3B!S1]
+[C]       [0A,2A!S1,1B,3B!S1]
+[A]       [0A,2A!S1,1B,3B!S1,4C!S1]
+[B]       [0A,2A!S1,1B,3B!S1,4C!S1,5A!S1.S2]
+...
+
+
+
 Spheres : (N, >, inf) -> (T, ->, False)
 Counts : (N, <, 0) -> (T, ->, False)
 Combined : ((N,N), (<,>), (0,inf)) -> (T, ->, False)

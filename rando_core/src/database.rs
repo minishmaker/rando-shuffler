@@ -1,394 +1,406 @@
-use std::{cell::RefCell, collections::HashMap, hash::Hash};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use either::Either;
 
 use crate::{
-    algebra::{County, Ntgr, Oolean, Sphery, Statey, Truthy},
-    descriptor::{Descriptor, EdgeTy, Logic},
-    shuffles::{Shuffle, ShufflePattern},
+    algebra::{County, Sphery, Truthy},
+    descriptor::{DescRef, Descriptor, Logic},
+    shuffles::{Shuffle, ShuffleDelta, ShufflePattern},
+    statey::{EdgeStatey, Statey},
 };
 
-use self::cache::{CacheRef, DBCache};
-use self::query::{DescriptorType, Query};
+use self::descriptor_eval::DatabaseDescriptorEval;
 
-mod cache;
-mod query;
+mod descriptor_eval;
+mod update;
 
+#[cfg(any())]
 #[cfg(test)]
 mod test;
 
-pub trait Database<'a, D, L, V, T, C, R>
+pub trait Database<D, L, R, K, V, T, C>
 where
-    D: Descriptor<V>,
-    L: Logic<V>,
-    V: Hash + Eq,
-    T: Truthy + Sphery + Statey,
-    C: County<T> + Sphery + Statey,
+    D: Descriptor<K, V>,
+    L: Logic<K, V>,
     R: Shuffle<V, V>,
+    K: Hash + Eq,
+    V: Hash + Eq,
+    T: Truthy + Sphery,
+    C: County<T> + Sphery,
 {
     type Err;
 
     fn initialize(
-        shuffles: HashMap<&'a str, R>,
+        shuffles: HashMap<K, R>,
         logic: L,
-        descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
-        descriptors_truthy: HashMap<&'a str, Vec<D>>,
-        descriptors_county: HashMap<&'a str, Vec<D>>,
+        locks: HashSet<K>,
+        descriptors: HashMap<K, D>,
     ) -> Self;
 
-    fn query_descriptor_truthy(&self, name: &str, values: &[V]) -> Result<T, Self::Err>;
-    fn query_descriptor_county(&self, name: &str, values: &[V]) -> Result<C, Self::Err>;
-    fn query_logic_node(&self, ln: &L::Node) -> Result<T, Self::Err>;
-    fn query_access(&self, name: &str, values: &[V]) -> Result<T, Self::Err>;
+    fn query_descriptor_truthy(
+        &self,
+        reference: &DescRef<K, V>,
+    ) -> Result<EdgeStatey<T, V>, Self::Err>;
+    fn query_descriptor_county(
+        &self,
+        reference: &DescRef<K, V>,
+    ) -> Result<EdgeStatey<C, V>, Self::Err>;
+    fn query_logic_node(&self, ln: &L::Node) -> Result<Statey<T, V>, Self::Err>;
+    fn query_edge(&self, edge: &Edge<L::Node>) -> Result<EdgeStatey<T, V>, Self::Err>;
+    fn query_access(&self, reference: &DescRef<K, V>) -> Result<Statey<T, V>, Self::Err>;
 
-    fn mod_shuffle(&mut self, shuffle: &str, delta: &R::Delta) -> Result<(), Self::Err>;
+    fn mod_shuffle(&mut self, shuffle: &K, delta: &R::Delta) -> Result<(), Self::Err>;
 }
 
-#[derive(Clone, Debug)]
-pub struct DBImpl<'a, D, L, V, T, C, R>
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DBImplErr {
+    Type,
+    UnknownShuffle,
+    UnknownDescriptor,
+    Uncached,
+    CountyCycle,
+}
+
+// edge -> node (implied)
+// node -> node, access
+// access -> descriptor
+// descriptor -> descriptor, edge
+
+pub struct DBImpl<D, L, R, K, V, T, C>
 where
-    D: Descriptor<V>,
-    L: Logic<V>,
-    L::Node: Clone + Hash + Eq,
-    V: Clone + Hash + Eq,
-    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
-    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
-    R: Shuffle<V, V>,
+    L: Logic<K, V>,
 {
-    data: DBData<'a, R, L, D>,
-    cache: RefCell<DBCache<'a, T, C, V, L::Node, DBImplErr>>,
+    data: DBData<D, L, R, K, V>,
+    cache: DBCache<L::Node, K, V, T, C, DBImplErr>,
 }
 
 #[derive(Clone, Debug)]
-pub struct DBData<'a, R, L, D> {
-    shuffles: HashMap<&'a str, R>,
+struct DBData<D, L, R, K, V>
+where
+    L: Logic<K, V>,
+{
+    shuffles: HashMap<K, R>,
     logic: L,
-    _descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
-    descriptors_truthy: HashMap<&'a str, Vec<D>>,
-    descriptors_county: HashMap<&'a str, Vec<D>>,
+    locks: HashSet<K>,
+    descriptors: HashMap<K, D>,
+    node_node_dependants: HashMap<L::Node, Vec<L::Node>>,
+    descriptor_dependants: HashMap<DescRef<K, V>, Vec<(Option<L::Node>, L::Node)>>,
 }
 
-impl<'a, D, L, V, T, C, R> Database<'a, D, L, V, T, C, R> for DBImpl<'a, D, L, V, T, C, R>
-where
-    D: Descriptor<V>,
-    L: Logic<V>,
-    L::Node: Hash + Eq + Clone,
-    V: Hash + Eq + Clone,
-    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
-    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
-    R: Shuffle<V, V>,
-{
-    type Err = ();
+type Edge<LN> = (Option<LN>, LN);
+type NodeValue<T, V, E = DBImplErr> = Result<Statey<T, V>, E>;
+type EdgeValue<T, V, E = DBImplErr> = Result<EdgeStatey<T, V>, E>;
+type DescValue<T, C, V, E = DBImplErr> = Result<Either<EdgeStatey<T, V>, EdgeStatey<C, V>>, E>;
 
-    fn initialize(
-        shuffles: HashMap<&'a str, R>,
-        logic: L,
-        _descriptors_keysy: HashMap<&'a str, (&'a str, &'a str)>,
-        descriptors_truthy: HashMap<&'a str, Vec<D>>,
-        descriptors_county: HashMap<&'a str, Vec<D>>,
-    ) -> Self {
-        Self {
-            data: DBData {
-                shuffles,
-                logic,
-                _descriptors_keysy,
-                descriptors_truthy,
-                descriptors_county,
-            },
+#[derive(Default)]
+struct DBCache<LN, K, V, T, C, E> {
+    node_value: HashMap<LN, NodeValue<T, V, E>>,
+    edge_value: HashMap<Edge<LN>, EdgeValue<T, V, E>>,
+    access_value: HashMap<DescRef<K, V>, NodeValue<T, V, E>>,
+    descriptor_value: HashMap<DescRef<K, V>, DescValue<T, C, V, E>>,
+    shuffle_dependants: HashMap<K, HashMap<ShufflePattern<V, V>, HashSet<DescRef<K, V>>>>,
+    dynamic_descriptor_dependants: HashMap<DescRef<K, V>, HashSet<DescRef<K, V>>>,
+    node_access_dependants: HashMap<LN, HashSet<DescRef<K, V>>>,
+    access_dependants: HashMap<DescRef<K, V>, HashSet<DescRef<K, V>>>,
+}
 
-            cache: Default::default(),
+impl<LN, K, V, T, C, E> DBCache<LN, K, V, T, C, E> {
+    fn default() -> Self {
+        DBCache {
+            node_value: Default::default(),
+            edge_value: Default::default(),
+            access_value: Default::default(),
+            descriptor_value: Default::default(),
+            shuffle_dependants: Default::default(),
+            dynamic_descriptor_dependants: Default::default(),
+            node_access_dependants: Default::default(),
+            access_dependants: Default::default(),
         }
     }
+}
 
-    fn query_descriptor_truthy(&self, name: &str, values: &[V]) -> Result<T, Self::Err> {
-        self.start_query(&Query::Descriptor(
-            name.into(),
-            values.into(),
-            DescriptorType::Truthy,
-        ))
-        .map(|v| v.left().unwrap())
+impl<D, L, R, K, V, T, C> Database<D, L, R, K, V, T, C> for DBImpl<D, L, R, K, V, T, C>
+where
+    D: Descriptor<K, V>,
+    L: Logic<K, V>,
+    L::Node: Hash + Eq,
+    K: Hash + Eq + Clone,
+    V: Hash + Eq + Clone,
+    T: Truthy + Sphery + PartialOrd + Clone,
+    C: County<T> + Sphery + PartialOrd + Clone,
+    R: Shuffle<V, V>,
+{
+    type Err = DBImplErr;
+
+    fn initialize(
+        shuffles: HashMap<K, R>,
+        logic: L,
+        locks: HashSet<K>,
+        descriptors: HashMap<K, D>,
+    ) -> Self {
+        let node_node_dependants = logic
+            .list_nodes()
+            .flat_map(|dest| {
+                logic
+                    .adjacent_nodes(dest.clone())
+                    .filter_map(move |src| Some((src?, dest.clone())))
+            })
+            .fold(HashMap::new(), |mut map, (src, dest)| {
+                map.entry(src).or_insert_with(Vec::new).push(dest);
+                map
+            });
+
+        let descriptor_edge_dependants = logic
+            .list_nodes()
+            .flat_map(|dest| {
+                logic
+                    .adjacent_nodes(dest.clone())
+                    .map(move |src| (src, dest.clone()))
+            })
+            .fold(HashMap::<_, Vec<Edge<L::Node>>>::new(), |mut map, edge| {
+                logic.eval_edge(
+                    edge.clone(),
+                    |k| {
+                        if let Some(deps) = map.get_mut(k) {
+                            deps.push(edge.clone());
+                        } else {
+                            map.insert(k.clone(), vec![edge.clone()]);
+                        }
+                    },
+                    |_| (),
+                    |_| (),
+                );
+                map
+            });
+
+        let queue = descriptor_edge_dependants
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let mut cache = DBCache::default();
+
+        let data = DBData {
+            shuffles,
+            logic,
+            locks,
+            descriptors,
+            node_node_dependants,
+            descriptor_dependants: descriptor_edge_dependants,
+        };
+
+        update::update_queue(&data, &mut cache, queue);
+
+        Self { data, cache }
     }
 
-    fn query_descriptor_county(&self, name: &str, values: &[V]) -> Result<C, Self::Err> {
-        self.start_query(&Query::Descriptor(
-            name.into(),
-            values.into(),
-            DescriptorType::County,
-        ))
-        .map(|v| v.right().unwrap())
-    }
-
-    fn query_logic_node(&self, ln: &L::Node) -> Result<T, Self::Err> {
-        self.start_query(&Query::Node(ln.clone()))
-            .map(|v| v.left().unwrap())
-    }
-
-    fn query_access(&self, name: &str, values: &[V]) -> Result<T, Self::Err> {
-        self.start_query(&Query::Access(name.into(), values.into()))
-            .map(|v| v.left().unwrap())
-    }
-
-    fn mod_shuffle(&mut self, shuffle: &str, delta: &R::Delta) -> Result<(), Self::Err> {
-        self.data.shuffles.get_mut(shuffle).ok_or(())?.modify(delta);
-
-        let data = &self.data;
+    fn query_descriptor_truthy(&self, reference: &DescRef<K, V>) -> EdgeValue<T, V> {
         self.cache
-            .get_mut()
-            .mod_shuffle(shuffle, delta, |n, c| Self::eval_query(data, c, n));
+            .descriptor_value
+            .get(reference)
+            .cloned()
+            .unwrap_or_else(|| Err(DBImplErr::Uncached))
+            .and_then(|v| v.left().ok_or(DBImplErr::Type))
+    }
+
+    fn query_descriptor_county(&self, reference: &DescRef<K, V>) -> EdgeValue<C, V> {
+        self.cache
+            .descriptor_value
+            .get(reference)
+            .cloned()
+            .unwrap_or_else(|| Err(DBImplErr::Uncached))
+            .and_then(|v| v.right().ok_or(DBImplErr::Type))
+    }
+
+    fn query_logic_node(&self, ln: &L::Node) -> Result<Statey<T, V>, Self::Err> {
+        self.cache
+            .node_value
+            .get(ln)
+            .cloned()
+            .unwrap_or_else(|| Ok(Statey::bottom()))
+    }
+
+    fn query_edge(&self, edge: &Edge<L::Node>) -> Result<EdgeStatey<T, V>, Self::Err> {
+        self.cache
+            .edge_value
+            .get(edge)
+            .cloned()
+            .unwrap_or_else(|| Ok(EdgeStatey::bottom()))
+    }
+
+    fn query_access(&self, reference: &DescRef<K, V>) -> Result<Statey<T, V>, Self::Err> {
+        self.cache
+            .access_value
+            .get(reference)
+            .cloned()
+            .unwrap_or_else(|| Err(DBImplErr::Uncached))
+    }
+
+    fn mod_shuffle(&mut self, name: &K, delta: &R::Delta) -> Result<(), Self::Err> {
+        let shuffle = self
+            .data
+            .shuffles
+            .get(name)
+            .ok_or(DBImplErr::UnknownShuffle)?;
+        if let Some(dependants) = self.cache.shuffle_dependants.get(&name) {
+            let updates = dependants
+                .iter()
+                .filter_map(|(pat, keys)| delta.affects(pat, shuffle).then(|| keys))
+                .flatten()
+                .cloned()
+                .collect::<Vec<_>>();
+
+            update::update_queue(&self.data, &mut self.cache, updates);
+        }
 
         Ok(())
     }
 }
 
-type DBImplErr = ();
-
-impl<'a, D, L, V, T, C, R> DBImpl<'a, D, L, V, T, C, R>
+fn eval_access<'a, T, E, K, V, L>(
+    reference: &DescRef<K, V>,
+    logic: &L,
+    mut node_cache: impl FnMut(L::Node) -> Result<Statey<T, V>, E>,
+) -> Result<Statey<T, V>, E>
 where
-    D: Descriptor<V>,
-    L: Logic<V>,
-    L::Node: Clone + Hash + Eq,
-    V: 'a + Hash + Eq + Clone,
-    T: Clone + Eq + PartialOrd + Truthy + Sphery + Statey,
-    C: Clone + Eq + PartialOrd + County<T> + Sphery + Statey,
-    R: Shuffle<V, V>,
+    L: Logic<K, V>,
+    T: Truthy + PartialOrd + Clone + 'a,
+
+    V: Clone + Hash + Eq + 'a,
 {
-    fn start_query(&self, query: &Query<V, L::Node>) -> Result<Either<T, C>, DBImplErr> {
-        Self::query_inner(&self.data, &mut self.cache.borrow_mut(), query, None)
-    }
+    TryIterator::new(logic.access_nodes(reference).map(|s| node_cache(s)))
+        .try_pass(|i| Statey::or_all(i))
+}
 
-    fn query_inner(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        query: &Query<V, L::Node>,
-        parent: Option<CacheRef>,
-    ) -> Result<Either<T, C>, DBImplErr> {
-        let result = cache.register(query, parent);
+fn eval_node<'a, T, E, K, V, L>(
+    node: L::Node,
+    logic: &L,
+    node_cache: impl Fn(L::Node) -> Result<&'a Statey<T, V>, E>,
+    edge_cache: impl Fn(Edge<L::Node>) -> Result<&'a EdgeStatey<T, V>, E>,
+) -> Result<Statey<T, V>, E>
+where
+    T: Truthy + Sphery + PartialOrd + Clone + 'a,
+    L: Logic<K, V>,
+    L::Node: Clone,
+    V: Clone + Hash + Eq + 'a,
+{
+    TryIterator::new(logic.adjacent_nodes(node.clone()).map(|s| -> Result<_, E> {
+        let source_truthy = s
+            .as_ref()
+            .map(|s| node_cache(s.clone()).map(Cow::Borrowed))
+            .transpose()
+            .map(|o| o.unwrap_or_else(|| Cow::Owned(Statey::lift(T::top()))));
+        Ok(source_truthy?.and_edge(edge_cache((s, node.clone()))?))
+    }))
+    .try_pass(|i| Statey::or_all(i.map(|e| e.map(Sphery::increment))))
+}
 
-        match result {
-            Ok(v) => v,
-            Err(cache_ref) => {
-                let value = Self::eval_query(data, cache, cache_ref);
-                cache.set_cache(cache_ref, value.clone(), |n, c| {
-                    Self::eval_query(data, c, n)
-                });
-                value
-            }
-        }
-    }
-
-    fn eval_query(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        cache_ref: CacheRef,
-    ) -> Result<Either<T, C>, DBImplErr> {
-        let query = cache.get_query(cache_ref);
-        match &*query {
-            Query::Descriptor(name, values, ty) => {
-                Self::eval_descriptor_ref(data, cache, cache_ref, name, values, *ty)
-            }
-            Query::Access(name, values) => {
-                Self::eval_access(data, cache, cache_ref, name, values).map(Either::Left)
-            }
-            Query::Node(node) => Self::eval_node(data, cache, cache_ref, node).map(Either::Left),
-        }
-    }
-
-    fn eval_node(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        cache_ref: CacheRef,
-        node: &L::Node,
-    ) -> Result<T, DBImplErr> {
-        data.logic
-            .edges(node)
-            .map(|edge| {
-                (
-                    Self::eval_descriptor(data, cache, cache_ref, edge.descriptor, &[])
-                        .and_then(|v| v.left().ok_or(())),
-                    match &edge.ty {
-                        EdgeTy::FromTrue => Ok(T::top()),
-                        EdgeTy::FromNode(source) => Self::query_inner(
-                            data,
-                            cache,
-                            &Query::Node(source.clone()),
-                            Some(cache_ref),
-                        )
-                        .and_then(|v| v.left().ok_or(())),
-                    },
-                )
-            })
-            .try_fold(T::bottom(), |a, (b, c)| {
-                b.and_then(|b| c.map(|c| a.join(&b.meet(&c))))
-            })
-            .map(|t| t.increment())
-    }
-
-    fn eval_access(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        cache_ref: CacheRef,
-        name: &str,
-        values: &[V],
-    ) -> Result<T, DBImplErr> {
-        data.logic
-            .access_nodes(name, values)
-            .map(|n| {
-                let query = Query::Node(n);
-                Self::query_inner(data, cache, &query, Some(cache_ref)).map(|v| v.left().unwrap())
-            })
-            .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
-    }
-
-    fn eval_descriptor_ref(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        cache_ref: CacheRef,
-        descriptor: &str,
-        values: &[V],
-        ty: DescriptorType,
-    ) -> Result<Either<T, C>, DBImplErr> {
-        let descriptors = match ty {
-            DescriptorType::Truthy => data.descriptors_truthy.get(descriptor).ok_or(()),
-            DescriptorType::County => data.descriptors_county.get(descriptor).ok_or(()),
-        }?;
-
-        let values = descriptors
-            .iter()
-            .map(|d| Self::eval_descriptor(data, cache, cache_ref, d, values));
-
-        match ty {
-            DescriptorType::Truthy => values
-                .map(|v| v.and_then(|v| v.left().ok_or(())))
-                .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
-                .map(Either::Left),
-            DescriptorType::County => values
-                .map(|v| v.and_then(|v| v.right().ok_or(())))
-                .try_fold(C::bottom(), |a, b| b.map(|b| a.join(&b)))
-                .map(Either::Right),
-        }
-    }
-
-    fn eval_descriptor<D1: Descriptor<V>>(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        cache_ref: CacheRef,
-        descriptor: &D1,
-        values: &[V],
-    ) -> Result<Either<T, C>, DBImplErr> {
-        let cache = RefCell::new(cache);
-        descriptor.eval(
-            values,
-            |t, v| {
-                let cache = &mut *cache.borrow_mut();
-                Self::eval_descriptor_truthy::<D1>(data, cache, cache_ref, t, v).map(Either::Left)
+fn eval_edge<'a, T, E, K, V, L>(
+    edge: Edge<L::Node>,
+    logic: &L,
+    descriptor_cache: impl Fn(&DescRef<K, V>) -> Result<&'a EdgeStatey<T, V>, E>,
+) -> Result<EdgeStatey<T, V>, E>
+where
+    L: Logic<K, V>,
+    T: Truthy + PartialOrd + Clone + 'a,
+    V: Clone + Hash + Eq + 'a,
+{
+    logic
+        .eval_edge(
+            edge,
+            |k| descriptor_cache(k).map(Cow::Borrowed),
+            |r| {
+                r.into_iter()
+                    .try_fold(EdgeStatey::lift(T::top()), |a, b| Ok(a.and(b?.as_ref())))
+                    .map(Cow::Owned)
             },
-            |c, v| {
-                let cache = &mut *cache.borrow_mut();
-                Self::eval_descriptor_county::<D1>(data, cache, cache_ref, c, v).map(Either::Right)
+            |r| {
+                r.into_iter()
+                    .map(|r| r.map(Cow::into_owned))
+                    .collect::<Result<_, _>>()
+                    .map(Cow::Owned)
             },
         )
+        .map(Cow::into_owned)
+}
+
+fn eval_descriptor<'a, T, C, K, V, R, D, F>(
+    descriptor: &D,
+    values: &[V],
+    descriptor_cache: F,
+    shuffles: impl FnMut(&K, &ShufflePattern<V, V>) -> Option<&'a R> + 'a,
+    access_cache: impl FnMut(&DescRef<K, V>) -> Result<Statey<T, V>, DBImplErr>,
+) -> DescValue<T, C, V>
+where
+    R: Shuffle<V, V> + 'a,
+    F: FnMut(
+        &DescRef<K, V>,
+    ) -> Result<Option<Either<EdgeStatey<T, V>, EdgeStatey<C, V>>>, DBImplErr>,
+    D: Descriptor<K, V>,
+    T: Truthy + PartialOrd + Clone + 'a,
+    C: County<T> + PartialOrd + Clone + 'a,
+    K: Hash + Eq,
+    V: Clone + Hash + Eq + 'a,
+{
+    let mut eval = DatabaseDescriptorEval {
+        access_cache,
+        descriptor_cache,
+        shuffles,
+    };
+    descriptor.eval(values, &mut eval)
+}
+
+/// TODO: Move this somewhere that makes more sense
+struct TryIterator<I, E>(Result<I, E>);
+
+impl<T, E, I> TryIterator<I, E>
+where
+    I: Iterator<Item = Result<T, E>>,
+{
+    fn new(i: I) -> Self {
+        Self(Ok(i))
     }
 
-    fn eval_descriptor_truthy<D1: Descriptor<V>>(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        cache_ref: CacheRef,
-        t: &D1::Truthy,
-        v: &[V],
-    ) -> Result<T, DBImplErr> {
-        let cache = RefCell::new(cache);
-        let oolean = |ool: Oolean| Ok(ool.to_truthy());
-        let reference = |name: &str, values: &[_]| {
-            let query = Query::Descriptor(name.into(), values.into(), DescriptorType::Truthy);
-            let cache = &mut *cache.borrow_mut();
-            Self::query_inner(data, cache, &query, Some(cache_ref)).and_then(|v| v.left().ok_or(()))
-        };
-        let access = |name: &str, values: &[_]| {
-            let query = Query::Access(name.into(), values.into());
-            let cache = &mut *cache.borrow_mut();
-            Self::query_inner(data, cache, &query, Some(cache_ref)).and_then(|v| v.left().ok_or(()))
-        };
-        let compare = |c: &D1::County, n: Ntgr| {
-            let cache = &mut *cache.borrow_mut();
-            Self::eval_descriptor_county::<D1>(data, cache, cache_ref, c, v)
-                .map(|c| County::ge(&c, n))
-        };
-        let exists = |n: &str, p: &ShufflePattern<V, V>, f: &dyn Fn(_) -> _| {
-            let shuffle = data.shuffles.get(n).ok_or(())?;
-            let cache = &mut *cache.borrow_mut();
-            cache.add_shuffle_dependency(n.to_string(), p.clone(), cache_ref);
-            p.apply(shuffle)
-                .into_inner()
-                .into_iter()
-                .map(f)
-                .map(|t| Self::eval_descriptor_truthy::<D1>(data, cache, cache_ref, &t, v))
-                .try_fold(T::bottom(), |a, b| b.map(|b| a.join(&b)))
-        };
-        let conj = |r, b: &_| {
-            let cache = &mut *cache.borrow_mut();
-            let a: T = r?;
-            let b = Self::eval_descriptor_truthy::<D1>(data, cache, cache_ref, b, v)?;
-            Ok(a.meet(&b))
-        };
-        let disj = |r, b: &_| {
-            let cache = &mut *cache.borrow_mut();
-            let a: T = r?;
-            let b = Self::eval_descriptor_truthy::<D1>(data, cache, cache_ref, b, v)?;
-            Ok(a.join(&b))
-        };
-        let prior = |_: &_| todo!();
-        let posterior = |_: &_| todo!();
+    fn try_pass<O, F>(mut self, f: F) -> Result<O, E>
+    where
+        I: IntoIterator<Item = Result<T, E>>,
+        F: FnOnce(&mut Self) -> O,
+    {
+        let value = f(&mut self);
+        self.0.map(|_| value)
+    }
+}
 
-        D1::eval_truthy(
-            t, v, oolean, reference, access, compare, exists, conj, disj, prior, posterior,
-        )
+impl<T, E, I> Iterator for TryIterator<I, E>
+where
+    I: Iterator<Item = Result<T, E>>,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            Ok(i) => {
+                let result = i.next()?;
+                match result {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        self.0 = Err(e);
+                        None
+                    }
+                }
+            }
+            _ => None,
+        }
     }
 
-    fn eval_descriptor_county<D1: Descriptor<V>>(
-        data: &DBData<R, L, D>,
-        cache: &mut DBCache<T, C, V, L::Node, DBImplErr>,
-        cache_ref: CacheRef,
-        c: &D1::County,
-        v: &[V],
-    ) -> Result<C, DBImplErr> {
-        let cache = RefCell::new(cache);
-        let ntgr = |n: Ntgr| Ok(n.to_county(T::top()));
-        let reference = |name: &str, values: &[_]| {
-            let query = Query::Descriptor(name.into(), values.into(), DescriptorType::Truthy);
-            let cache = &mut *cache.borrow_mut();
-            Self::query_inner(data, cache, &query, Some(cache_ref))
-                .and_then(|v| v.right().ok_or(()))
-        };
-        let comb = |r, b: &_, n| {
-            let cache = &mut *cache.borrow_mut();
-            let a: C = r?;
-            let b = Self::eval_descriptor_county::<D1>(data, cache, cache_ref, b, v)?;
-            Ok(a.add(&b.scale(n)))
-        };
-        let min = |r, b: &_| {
-            let cache = &mut *cache.borrow_mut();
-            let a: C = r?;
-            let b = Self::eval_descriptor_county::<D1>(data, cache, cache_ref, b, v)?;
-            Ok(a.meet(&b))
-        };
-        let max = |r, b: &_| {
-            let cache = &mut *cache.borrow_mut();
-            let a: C = r?;
-            let b = Self::eval_descriptor_county::<D1>(data, cache, cache_ref, b, v)?;
-            Ok(a.join(&b))
-        };
-        let count = |n: &str, p: &ShufflePattern<V, V>, f: &dyn Fn(_) -> _| {
-            let shuffle = data.shuffles.get(n).ok_or(())?;
-            let cache = &mut *cache.borrow_mut();
-            cache.add_shuffle_dependency(n.to_string(), p.clone(), cache_ref);
-            p.apply(shuffle)
-                .into_inner()
-                .into_iter()
-                .map(f)
-                .map(|t| Self::eval_descriptor_truthy::<D1>(data, cache, cache_ref, &t, v))
-                .try_fold(C::top(), |a, b| b.map(|b| a.add(&C::lift(&b))))
-        };
-
-        D1::eval_county(c, v, ntgr, reference, comb, min, max, count)
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.0 {
+            Ok(i) => (0, i.size_hint().1),
+            Err(_) => (0, Some(0)),
+        }
     }
 }
