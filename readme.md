@@ -3,10 +3,12 @@ This repository contains a partial implementation of the Minishmaker Randomizer 
 It is incomplete and poorly tested. Unfortunately, I (Berylliosis) am unable to continue working on it,
 so the situation isn't likely to improve in the short term.
 
+Currently it only compiles with a nightly compiler, but we can switch to stable when GAT gets stabilized.
+
 ## Available Features
 - Logic lang parsing (good error messages)
 - Descriptor lang parsing (poor error messages, missing terminator)
-- Relation lang parsing (poor error messages, missing `data`, `relation` branch)
+- Relation lang parsing (poor error messages, missing `data`, `shuffle` branch)
 - Query engine (`engine` branch). Untested since rewrite, supports state.
     - Support for keys requires minor modifications
 
@@ -18,6 +20,7 @@ so the situation isn't likely to improve in the short term.
     - Shouldn't be implemented with existing AST
     - Names/values/logic nodes assumed to be cheap to copy
     - Modification syntax
+    - Commented code isn't right cause it's before GAT
 - Actual shuffling
     - Initial implementation should be guess and check
     - This requires solving key values
